@@ -36,10 +36,23 @@ export interface HistoryItem {
   amount?: number
 }
 
+export interface BirthdayInfo {
+  has_birth_date: boolean
+  is_today: boolean
+  days_to_birthday: number | null
+  is_birthday_period: boolean
+  benefit_used_this_year: boolean
+  benefit_available: boolean
+  birthday_points_awarded: number
+  birthday_points_config: number
+  gift_product: { name: string; image_url: string } | null
+}
+
 export interface MeResponse {
   partner: Partner
   total_points: number
   cards: LoyaltyCard[]
+  birthday?: BirthdayInfo
 }
 
 export interface AuthSession {

@@ -41,6 +41,10 @@
                     </block>
 
                     <block title="Beneficio de Cumpleaños">
+                        <setting string="Puntos por cumpleaños"
+                                 help="Puntos otorgados automáticamente el día del cumpleaños del cliente.">
+                            <field name="loyalty_birthday_points"/>
+                        </setting>
                         <setting string="Producto de regalo"
                                  help="Producto que se entrega físicamente al cliente en su cumpleaños. Solo canjeable en el local.">
                             <field name="loyalty_birthday_product_id"

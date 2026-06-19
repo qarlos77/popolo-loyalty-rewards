@@ -56,6 +56,12 @@ class ResConfigSettings(models.TransientModel):
     )
 
     # ── Birthday benefit ──────────────────────────────────────────────────────
+    loyalty_birthday_points = fields.Integer(
+        string='Puntos por cumpleaños',
+        config_parameter='loyalty_rewards_api.birthday_points',
+        default=50,
+        help='Puntos que se otorgan automáticamente al cliente el día de su cumpleaños.',
+    )
     loyalty_birthday_product_id = fields.Many2one(
         'product.template',
         string='Producto de regalo de cumpleaños',

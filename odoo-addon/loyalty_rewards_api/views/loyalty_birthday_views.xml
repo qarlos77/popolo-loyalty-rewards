@@ -7,9 +7,11 @@
         <field name="model">loyalty.birthday.redemption</field>
         <field name="arch" type="xml">
             <list string="Canjes de Cumpleaños" create="false" edit="false">
-                <field name="redeemed_at" string="Fecha"/>
-                <field name="partner_id" string="Cliente"/>
-                <field name="year"       string="Año"/>
+                <field name="redeemed_at"  string="Fecha"/>
+                <field name="partner_id"   string="Cliente"/>
+                <field name="year"         string="Año"/>
+                <field name="source"       string="Origen"/>
+                <field name="points_awarded" string="Puntos"/>
                 <field name="product_name" string="Producto regalado"/>
                 <field name="redeemed_by"  string="Canjeado por"/>
                 <field name="notes"        string="Notas"/>

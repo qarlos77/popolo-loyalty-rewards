@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="ir_cron_birthday_points" model="ir.cron">
+        <field name="name">Loyalty: Otorgar puntos de cumpleaños</field>
+        <field name="model_id" ref="loyalty_rewards_api.model_loyalty_birthday_redemption"/>
+        <field name="state">code</field>
+        <field name="code">model._cron_award_birthday_points()</field>
+        <field name="interval_number">1</field>
+        <field name="interval_type">days</field>
+        <field name="numbercall">-1</field>
+        <field name="active">True</field>
+        <field name="nextcall">2026-06-20 05:00:00</field>
+    </record>
+</odoo>

@@ -64,54 +64,91 @@ def _find_partner_by_email(env, email):
     return partner if partner else None
 
 
-def _birthday_info(partner, window_days=30):
+def _birthday_info(partner, window_days=30, icp=None):
+    """Return birthday status dict for a partner (uses Peru/Lima timezone for is_today)."""
+    import pytz
+    peru_tz    = pytz.timezone('America/Lima')
+    today_peru = datetime.now(peru_tz).date()
+
     if not partner.loyalty_birth_date:
         return {
-            'has_birth_date': False,
-            'days_to_birthday': None,
-            'is_birthday_period': False,
-            'benefit_used_this_year': False,
-            'benefit_available': False,
+            'has_birth_date':           False,
+            'is_today':                 False,
+            'days_to_birthday':         None,
+            'is_birthday_period':       False,
+            'benefit_used_this_year':   False,
+            'benefit_available':        False,
+            'birthday_points_awarded':  0,
+            'birthday_points_config':   0,
+            'gift_product':             None,
         }
 
-    today = _date.today()
     birth = partner.loyalty_birth_date
 
     try:
-        bday_this = birth.replace(year=today.year)
+        bday_this = birth.replace(year=today_peru.year)
     except ValueError:
-        bday_this = birth.replace(year=today.year, day=28)
+        bday_this = birth.replace(year=today_peru.year, day=28)
 
-    diff_from_bday = (today - bday_this).days
+    diff_from_bday = (today_peru - bday_this).days
+    is_today = (diff_from_bday == 0)
 
     if diff_from_bday < 0:
         days_to   = -diff_from_bday
-        in_window = (days_to == 0)
+        in_window = False
     elif diff_from_bday == 0:
         days_to   = 0
         in_window = True
     else:
         try:
-            bday_next = birth.replace(year=today.year + 1)
+            bday_next = birth.replace(year=today_peru.year + 1)
         except ValueError:
-            bday_next = birth.replace(year=today.year + 1, day=28)
-        days_to   = (bday_next - today).days
+            bday_next = birth.replace(year=today_peru.year + 1, day=28)
+        days_to   = (bday_next - today_peru).days
         in_window = (diff_from_bday <= window_days)
 
-    current_year = today.year
-    already_used = bool(request.env['loyalty.birthday.redemption'].sudo().search([
+    current_year = today_peru.year
+    BdayLog = request.env['loyalty.birthday.redemption'].sudo()
+
+    already_used = bool(BdayLog.search([
         ('partner_id', '=', partner.id),
         ('year', '=', current_year),
+        ('source', '=', 'cashier'),
     ], limit=1))
 
+    auto_log = BdayLog.search([
+        ('partner_id', '=', partner.id),
+        ('year', '=', current_year),
+        ('source', '=', 'automatic'),
+    ], limit=1)
+    birthday_points_awarded = auto_log.points_awarded if auto_log else 0
+
+    # Config: birthday points and gift product
+    _icp = icp or request.env['ir.config_parameter'].sudo()
+    birthday_points_config = int(float(_icp.get_param('loyalty_rewards_api.birthday_points', '0')))
+
+    gift_product = None
+    pid_str = _icp.get_param('loyalty_rewards_api.birthday_product_id', '')
+    if pid_str and pid_str.isdigit():
+        tmpl = request.env['product.template'].sudo().browse(int(pid_str))
+        if tmpl.exists():
+            gift_product = {
+                'name':      tmpl.name,
+                'image_url': f'/web/image/product.template/{tmpl.id}/image_512',
+            }
+
     return {
-        'has_birth_date':         True,
-        'birth_date':             birth.isoformat(),
-        'days_to_birthday':       days_to,
-        'is_birthday_period':     in_window,
-        'birthday_window_days':   window_days,
-        'benefit_used_this_year': already_used,
-        'benefit_available':      in_window and not already_used,
+        'has_birth_date':          True,
+        'birth_date':              birth.isoformat(),
+        'is_today':                is_today,
+        'days_to_birthday':        days_to,
+        'is_birthday_period':      in_window,
+        'birthday_window_days':    window_days,
+        'benefit_used_this_year':  already_used,
+        'benefit_available':       in_window and not already_used,
+        'birthday_points_awarded': birthday_points_awarded,
+        'birthday_points_config':  birthday_points_config,
+        'gift_product':            gift_product,
     }
 
 
