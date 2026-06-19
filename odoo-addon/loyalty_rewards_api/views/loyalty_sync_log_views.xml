@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- List view -->
+    <record id="view_loyalty_sync_log_list" model="ir.ui.view">
+        <field name="name">loyalty.sync.log.list</field>
+        <field name="model">loyalty.sync.log</field>
+        <field name="arch" type="xml">
+            <list string="Sync Log" default_order="create_date desc"
+                  decoration-success="state == 'synced'"
+                  decoration-warning="state == 'no_partner'"
+                  decoration-danger="state in ('error','no_card')"
+                  decoration-muted="state == 'duplicate'">
+                <field name="create_date" string="Fecha"/>
+                <field name="source" string="Origen"/>
+                <field name="external_order_id" string="Orden #"/>
+                <field name="phone"/>
+                <field name="partner_id" string="Contacto"/>
+                <field name="order_total" string="Total"/>
+                <field name="currency"/>
+                <field name="points_awarded" string="Puntos"/>
+                <field name="state" string="Estado" widget="badge"/>
+                <field name="message" string="Detalle"/>
+            </list>
+        </field>
+    </record>
+
+    <!-- Search view -->
+    <record id="view_loyalty_sync_log_search" model="ir.ui.view">
+        <field name="name">loyalty.sync.log.search</field>
+        <field name="model">loyalty.sync.log</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="external_order_id" string="Orden #"/>
+                <field name="phone"/>
+                <field name="partner_id"/>
+                <filter string="Sincronizados"  name="synced"     domain="[('state','=','synced')]"/>
+                <filter string="Sin contacto"   name="no_partner" domain="[('state','=','no_partner')]"/>
+                <filter string="Error"          name="error"      domain="[('state','in',['error','no_card'])]"/>
+                <filter string="Duplicados"     name="duplicate"  domain="[('state','=','duplicate')]"/>
+                <separator/>
+                <filter string="Por estado"  name="by_state"  context="{'group_by':'state'}"/>
+                <filter string="Por origen"  name="by_source" context="{'group_by':'source'}"/>
+                <filter string="Por fecha"   name="by_date"   context="{'group_by':'create_date:day'}"/>
+            </search>
+        </field>
+    </record>
+
+    <!-- Action -->
+    <record id="action_loyalty_sync_log" model="ir.actions.act_window">
+        <field name="name">Log de Sincronización WooCommerce</field>
+        <field name="res_model">loyalty.sync.log</field>
+        <field name="view_mode">list</field>
+    </record>
+
+    <!-- Menu under Loyalty app -->
+    <menuitem id="menu_loyalty_sync_log"
+              name="Log Sync WooCommerce"
+              parent="website_sale_loyalty.menu_loyalty"
+              action="action_loyalty_sync_log"
+              sequence="50"
+              groups="base.group_system"/>
+</odoo>

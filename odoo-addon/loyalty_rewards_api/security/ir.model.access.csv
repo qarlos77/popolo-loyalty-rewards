@@ -1,3 +1,4 @@
 id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
 access_loyalty_api_token_user,loyalty.api.token user,model_loyalty_api_token,base.group_user,1,1,1,1
 access_loyalty_transaction_user,loyalty.transaction user,model_loyalty_transaction,base.group_user,1,1,1,1
+access_loyalty_sync_log_user,loyalty.sync.log user,model_loyalty_sync_log,base.group_user,1,1,1,1

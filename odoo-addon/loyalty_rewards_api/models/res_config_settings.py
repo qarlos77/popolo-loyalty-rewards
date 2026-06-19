@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import secrets
 from odoo import fields, models
 
 
@@ -13,11 +14,6 @@ class ResConfigSettings(models.TransientModel):
     loyalty_wa_token = fields.Char(
         string='WhatsApp Permanent Token',
         config_parameter='loyalty_rewards_api.wa_token',
-    )
-    loyalty_wa_template_welcome = fields.Char(
-        string='Template: Welcome',
-        config_parameter='loyalty_rewards_api.wa_template_welcome',
-        default='loyalty_welcome',
     )
     loyalty_wa_template_redeemed = fields.Char(
         string='Template: Redeemed',
@@ -41,3 +37,39 @@ class ResConfigSettings(models.TransientModel):
         config_parameter='loyalty_rewards_api.pin_required',
         default=False,
     )
+
+    # WooCommerce / external sync
+    loyalty_sync_api_key = fields.Char(
+        string='Sync API Key',
+        config_parameter='loyalty_rewards_api.sync_api_key',
+        help='Clave secreta que WooCommerce envía en el header X-API-Key.',
+    )
+    loyalty_points_ratio = fields.Float(
+        string='Puntos por unidad de moneda',
+        config_parameter='loyalty_rewards_api.points_ratio',
+        default=0.1,
+        help='Puntos por cada 1 unidad de moneda. Ejemplo: 0.1 = 1 punto por S/.10.',
+    )
+
+    def action_generate_sync_api_key(self):
+        """Generate a cryptographically secure API key and save it immediately."""
+        key = secrets.token_hex(32)
+
+        # Persist directly so it survives without needing the Save button
+        self.env['ir.config_parameter'].sudo().set_param(
+            'loyalty_rewards_api.sync_api_key', key
+        )
+        # Also set on the transient record so the field reflects it
+        self.loyalty_sync_api_key = key
+
+        return {
+            'type': 'ir.actions.client',
+            'tag': 'display_notification',
+            'params': {
+                'title': 'API Key generada y guardada',
+                'message': key,
+                'type': 'success',
+                'sticky': True,
+                'next': {'type': 'ir.actions.client', 'tag': 'reload'},
+            },
+        }

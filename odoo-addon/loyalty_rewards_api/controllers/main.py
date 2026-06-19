@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import json
+import re
 import requests as _req
 from datetime import datetime
 from odoo import http, fields
@@ -13,14 +14,14 @@ def _json_response(data, status=200):
         mimetype='application/json',
         headers={
             'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-API-Key',
             'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
         },
     )
 
 
 def _auth_partner(req):
-    """Validate Bearer token and return (token_record, partner) or (None, None)."""
+    """Validate Bearer token → (token_record, partner) or (None, None)."""
     auth = req.httprequest.headers.get('Authorization', '')
     if not auth.startswith('Bearer '):
         return None, None
@@ -58,6 +59,17 @@ def _reward_to_dict(reward, card_points):
     }
 
 
+def _normalize_phone(raw):
+    """Strip formatting; remove leading country code (51 = Peru)."""
+    digits = re.sub(r'\D', '', raw or '')
+    # Remove Peruvian country code: +51 or 0051
+    if len(digits) >= 11 and digits.startswith('51'):
+        digits = digits[2:]
+    elif len(digits) >= 12 and digits.startswith('0051'):
+        digits = digits[4:]
+    return digits
+
+
 class LoyaltyAPI(http.Controller):
 
     # ── CORS preflight ───────────────────────────────────────────────────────
@@ -77,24 +89,14 @@ class LoyaltyAPI(http.Controller):
 
         identifier = (body.get('identifier') or '').strip()
         if not identifier:
-            return _json_response({'error': 'identifier required (DNI or phone)'}, 400)
+            return _json_response({'error': 'phone required'}, 400)
 
         env = request.env['res.partner'].sudo()
-
-        # Search by DNI (vat) or phone
-        partner = env.search([('vat', '=', identifier), ('active', '=', True)], limit=1)
-        if not partner:
-            partner = env.search([
-                '|',
-                ('phone', '=', identifier),
-                ('mobile', '=', identifier),
-                ('active', '=', True),
-            ], limit=1)
+        partner = env.search([('phone', '=', identifier), ('active', '=', True)], limit=1)
 
         if not partner:
             return _json_response({'error': 'Customer not found'}, 404)
 
-        # Check they have at least one loyalty card
         cards = request.env['loyalty.card'].sudo().search([('partner_id', '=', partner.id)])
         if not cards:
             return _json_response({'error': 'No loyalty account found for this customer'}, 404)
@@ -110,7 +112,7 @@ class LoyaltyAPI(http.Controller):
             'partner': {
                 'id': partner.id,
                 'name': partner.name,
-                'phone': partner.phone or partner.mobile,
+                'phone': partner.phone or '',
                 'vat': partner.vat,
                 'image_url': f'/web/image/res.partner/{partner.id}/image_128',
             },
@@ -131,7 +133,7 @@ class LoyaltyAPI(http.Controller):
             'partner': {
                 'id': partner.id,
                 'name': partner.name,
-                'phone': partner.phone or partner.mobile,
+                'phone': partner.phone or '',
                 'vat': partner.vat,
                 'image_url': f'/web/image/res.partner/{partner.id}/image_128',
             },
@@ -139,7 +141,7 @@ class LoyaltyAPI(http.Controller):
             'cards': [_card_to_dict(c) for c in cards],
         })
 
-    # ── Real-time balance (for polling) ──────────────────────────────────────
+    # ── Real-time balance ────────────────────────────────────────────────────
     @http.route('/api/loyalty/balance', type='http', auth='none',
                 methods=['GET'], csrf=False)
     def balance(self, **kw):
@@ -168,8 +170,7 @@ class LoyaltyAPI(http.Controller):
         total_points = sum(card_points_by_program.values())
 
         program_ids = cards.mapped('program_id').ids
-        reward_model = request.env['loyalty.reward'].sudo()
-        rewards = reward_model.search([
+        rewards = request.env['loyalty.reward'].sudo().search([
             ('program_id', 'in', program_ids),
             ('reward_type', 'in', ['free_product', 'discount', 'gift_card']),
         ], order='required_points asc')
@@ -190,16 +191,14 @@ class LoyaltyAPI(http.Controller):
 
         limit = int(request.httprequest.args.get('limit', 20))
 
-        # App redemptions
         txns = request.env['loyalty.transaction'].sudo().search([
             ('partner_id', '=', partner.id),
         ], limit=limit, order='date desc')
 
-        # POS orders that earned points
-        pos_orders = request.env['pos.order'].sudo().search([
-            ('partner_id', '=', partner.id),
-            ('loyalty_points', '!=', 0),
-        ], limit=limit, order='date_order desc')
+        cards = request.env['loyalty.card'].sudo().search([('partner_id', '=', partner.id)])
+        lh_records = request.env['loyalty.history'].sudo().search([
+            ('card_id', 'in', cards.ids),
+        ], limit=limit, order='id desc')
 
         history = []
 
@@ -214,20 +213,18 @@ class LoyaltyAPI(http.Controller):
                 'code': txn.confirmation_code,
             })
 
-        for order in pos_orders:
-            pts = getattr(order, 'loyalty_points', 0)
+        for lh in lh_records:
+            pts = lh.issued - lh.used
             history.append({
-                'id': f'pos_{order.id}',
-                'type': 'earned',
-                'description': f'Compra #{order.name}',
+                'id': f'lh_{lh.id}',
+                'type': 'earned' if pts >= 0 else 'redeemed',
+                'description': lh.description or ('Puntos ganados' if pts >= 0 else 'Puntos usados'),
                 'points': pts,
-                'date': order.date_order.isoformat(),
-                'amount': order.amount_total,
+                'date': lh.create_date.isoformat(),
                 'state': 'confirmed',
             })
 
         history.sort(key=lambda x: x['date'], reverse=True)
-
         return _json_response({'history': history[:limit]})
 
     # ── Redeem reward ────────────────────────────────────────────────────────
@@ -244,12 +241,12 @@ class LoyaltyAPI(http.Controller):
             return _json_response({'error': 'Invalid JSON'}, 400)
 
         reward_id = body.get('reward_id')
-        card_id = body.get('card_id')
+        card_id   = body.get('card_id')
         if not reward_id or not card_id:
             return _json_response({'error': 'reward_id and card_id required'}, 400)
 
-        env = request.env
-        card = env['loyalty.card'].sudo().browse(card_id)
+        env    = request.env
+        card   = env['loyalty.card'].sudo().browse(card_id)
         reward = env['loyalty.reward'].sudo().browse(reward_id)
 
         if not card.exists() or card.partner_id.id != partner.id:
@@ -259,12 +256,10 @@ class LoyaltyAPI(http.Controller):
         if card.points < reward.required_points:
             return _json_response({'error': 'Insufficient points'}, 400)
 
-        # Anti-double-redemption: check for recent pending txn
-        from datetime import datetime
         recent = env['loyalty.transaction'].sudo().search([
             ('partner_id', '=', partner.id),
-            ('reward_id', '=', reward_id),
-            ('state', '=', 'pending'),
+            ('reward_id',  '=', reward_id),
+            ('state',      '=', 'pending'),
             ('lock_expires', '>', fields.Datetime.now()),
         ], limit=1)
         if recent:
@@ -275,13 +270,9 @@ class LoyaltyAPI(http.Controller):
             }, 409)
 
         txn = env['loyalty.transaction'].sudo().create_redemption(card, reward)
-
-        # Deduct points
         card.sudo().write({'points': card.points - reward.required_points})
 
-        # Send WhatsApp notification
         self._notify_whatsapp_redeemed(partner, reward, txn)
-        # Send email
         self._notify_email_redeemed(partner, reward, txn)
 
         return _json_response({
@@ -302,7 +293,7 @@ class LoyaltyAPI(http.Controller):
             }),
         })
 
-    # ── Confirm redemption (called by cashier's POS scan) ───────────────────
+    # ── Confirm redemption (cashier scan) ────────────────────────────────────
     @http.route('/api/loyalty/confirm-redeem', type='http', auth='none',
                 methods=['POST'], csrf=False)
     def confirm_redeem(self, **kw):
@@ -312,7 +303,7 @@ class LoyaltyAPI(http.Controller):
             return _json_response({'error': 'Invalid JSON'}, 400)
 
         code = (body.get('code') or '').upper()
-        txn = request.env['loyalty.transaction'].sudo().search([
+        txn  = request.env['loyalty.transaction'].sudo().search([
             ('confirmation_code', '=', code),
             ('state', '=', 'pending'),
         ], limit=1)
@@ -322,7 +313,6 @@ class LoyaltyAPI(http.Controller):
 
         if txn.lock_expires < fields.Datetime.now():
             txn.write({'state': 'expired'})
-            # Refund points
             txn.card_id.sudo().write({'points': txn.card_id.points + txn.points_used})
             return _json_response({'error': 'Redemption code has expired'}, 410)
 
@@ -335,7 +325,7 @@ class LoyaltyAPI(http.Controller):
             'confirmed_at': txn.redeemed_at.isoformat(),
         })
 
-    # ── Lookup by DNI (for cashier) ──────────────────────────────────────────
+    # ── Lookup by phone/DNI (cashier) ────────────────────────────────────────
     @http.route('/api/loyalty/lookup', type='http', auth='none',
                 methods=['POST'], csrf=False)
     def lookup_by_dni(self, **kw):
@@ -347,7 +337,7 @@ class LoyaltyAPI(http.Controller):
         identifier = (body.get('identifier') or '').strip()
         env = request.env
         partner = env['res.partner'].sudo().search([
-            '|', ('vat', '=', identifier), ('mobile', '=', identifier)
+            '|', ('vat', '=', identifier), ('phone', '=', identifier)
         ], limit=1)
 
         if not partner:
@@ -360,13 +350,210 @@ class LoyaltyAPI(http.Controller):
             'total_points': sum(c.points for c in cards),
         })
 
+    # ── WooCommerce sync-order ───────────────────────────────────────────────
+    @http.route('/api/loyalty/sync-order', type='http', auth='none',
+                methods=['POST'], csrf=False)
+    def sync_order(self, **kw):
+        # --- API key auth ---
+        icp         = request.env['ir.config_parameter'].sudo()
+        stored_key  = icp.get_param('loyalty_rewards_api.sync_api_key', '')
+        sent_key    = request.httprequest.headers.get('X-API-Key', '')
+        if not stored_key:
+            return _json_response({'error': 'Sync API key not configured in Odoo settings'}, 503)
+        if sent_key != stored_key:
+            return _json_response({'error': 'Invalid API key'}, 401)
+
+        try:
+            body = json.loads(request.httprequest.data)
+        except Exception:
+            return _json_response({'error': 'Invalid JSON'}, 400)
+
+        order_id    = str(body.get('order_id', '')).strip()
+        phone_raw   = str(body.get('phone', '')).strip()
+        order_total = float(body.get('order_total', 0))
+        currency    = body.get('currency', 'PEN')
+        source      = body.get('source', 'woocommerce')
+        order_key   = body.get('order_key', '')
+
+        if not order_id or not phone_raw:
+            return _json_response({'error': 'order_id and phone are required'}, 400)
+
+        SyncLog = request.env['loyalty.sync.log'].sudo()
+
+        # --- Idempotency: already synced? ---
+        duplicate = SyncLog.search([
+            ('external_order_id', '=', order_id),
+            ('source',            '=', source),
+            ('state',             '=', 'synced'),
+        ], limit=1)
+        if duplicate:
+            SyncLog.create({
+                'external_order_id': order_id,
+                'source':  source,
+                'phone':   phone_raw,
+                'order_total': order_total,
+                'currency':    currency,
+                'state':   'duplicate',
+                'message': f'Order already synced (log id {duplicate.id})',
+            })
+            return _json_response({
+                'error':     'Order already synced',
+                'duplicate': True,
+                'partner':   duplicate.partner_id.name if duplicate.partner_id else None,
+                'points':    duplicate.points_awarded,
+            }, 409)
+
+        # --- Normalize and search phone ---
+        phone_clean = _normalize_phone(phone_raw)
+        Partner = request.env['res.partner'].sudo()
+        partner = (
+            Partner.search([('phone', '=', phone_clean),  ('active', '=', True)], limit=1)
+            or Partner.search([('phone', '=', phone_raw), ('active', '=', True)], limit=1)
+            or Partner.search([('phone', 'like', phone_clean[-9:]), ('active', '=', True)], limit=1)
+            if len(phone_clean) >= 9 else Partner
+        )
+
+        if not partner or not partner.id:
+            SyncLog.create({
+                'external_order_id': order_id,
+                'source':  source,
+                'phone':   phone_raw,
+                'order_total': order_total,
+                'currency':    currency,
+                'state':   'no_partner',
+                'message': f'No partner found for phone "{phone_raw}" (cleaned: "{phone_clean}")',
+            })
+            return _json_response({
+                'error': 'Partner not found',
+                'phone': phone_raw,
+                'hint':  'Register this phone number in Odoo Contacts first.',
+            }, 404)
+
+        # --- Find or create loyalty card ---
+        cards = request.env['loyalty.card'].sudo().search([('partner_id', '=', partner.id)])
+        if not cards:
+            program = request.env['loyalty.program'].sudo().search([
+                ('program_type', '=', 'loyalty'),
+                ('active',       '=', True),
+            ], limit=1)
+            if not program:
+                SyncLog.create({
+                    'external_order_id': order_id,
+                    'source':  source,
+                    'phone':   phone_raw,
+                    'partner_id': partner.id,
+                    'order_total': order_total,
+                    'currency':    currency,
+                    'state':   'no_card',
+                    'message': 'No active loyalty program found in Odoo.',
+                })
+                return _json_response({'error': 'No active loyalty program configured'}, 503)
+            cards = request.env['loyalty.card'].sudo().create({
+                'partner_id': partner.id,
+                'program_id': program.id,
+                'points':     0,
+            })
+
+        card = cards[0] if len(cards) > 1 else cards
+
+        # --- Calculate points ---
+        ratio  = float(icp.get_param('loyalty_rewards_api.points_ratio', '0.1'))
+        points = int(order_total * ratio)
+
+        if points <= 0:
+            SyncLog.create({
+                'external_order_id': order_id,
+                'source':  source,
+                'phone':   phone_raw,
+                'partner_id': partner.id,
+                'order_total': order_total,
+                'currency':    currency,
+                'points_awarded': 0,
+                'state':   'synced',
+                'message': f'Order total {order_total} is below minimum threshold (ratio={ratio}).',
+            })
+            return _json_response({
+                'success':   True,
+                'points_awarded': 0,
+                'note':      f'Order total too small to earn points (need at least {int(1/ratio)} {currency})',
+                'total_points': card.points,
+            })
+
+        # --- Award points ---
+        card.sudo().write({'points': card.points + points})
+
+        request.env['loyalty.history'].sudo().create({
+            'card_id':     card.id,
+            'description': f'WooCommerce #{order_id}',
+            'issued':      points,
+            'used':        0,
+        })
+
+        SyncLog.create({
+            'external_order_id': order_id,
+            'source':  source,
+            'phone':   phone_raw,
+            'partner_id':   partner.id,
+            'order_total':  order_total,
+            'currency':     currency,
+            'points_awarded': points,
+            'state':   'synced',
+            'message': f'OK — {points} pts awarded. New balance: {card.points}',
+        })
+
+        # Notify partner via WhatsApp if configured
+        self._notify_whatsapp_earned(partner, points, card.points)
+
+        return _json_response({
+            'success':        True,
+            'partner_name':   partner.name,
+            'partner_phone':  partner.phone,
+            'points_awarded': points,
+            'total_points':   card.points,
+            'card_code':      card.code,
+        })
+
     # ── WhatsApp helpers ─────────────────────────────────────────────────────
-    def _notify_whatsapp_redeemed(self, partner, reward, txn):
-        icp = request.env['ir.config_parameter'].sudo()
+    def _notify_whatsapp_earned(self, partner, points_earned, total_points):
+        icp      = request.env['ir.config_parameter'].sudo()
         phone_id = icp.get_param('loyalty_rewards_api.wa_phone_id')
-        token = icp.get_param('loyalty_rewards_api.wa_token')
+        token    = icp.get_param('loyalty_rewards_api.wa_token')
+        template = icp.get_param('loyalty_rewards_api.wa_template_earned', 'loyalty_earned')
+        phone    = re.sub(r'\D', '', partner.phone or '')
+        if not phone_id or not token or not phone:
+            return
+        try:
+            _req.post(
+                f'https://graph.facebook.com/v19.0/{phone_id}/messages',
+                headers={'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'},
+                json={
+                    'messaging_product': 'whatsapp',
+                    'to': phone,
+                    'type': 'template',
+                    'template': {
+                        'name': template,
+                        'language': {'code': 'es'},
+                        'components': [{
+                            'type': 'body',
+                            'parameters': [
+                                {'type': 'text', 'text': partner.name},
+                                {'type': 'text', 'text': str(int(points_earned))},
+                                {'type': 'text', 'text': str(int(total_points))},
+                            ],
+                        }],
+                    },
+                },
+                timeout=5,
+            )
+        except Exception:
+            pass
+
+    def _notify_whatsapp_redeemed(self, partner, reward, txn):
+        icp      = request.env['ir.config_parameter'].sudo()
+        phone_id = icp.get_param('loyalty_rewards_api.wa_phone_id')
+        token    = icp.get_param('loyalty_rewards_api.wa_token')
         template = icp.get_param('loyalty_rewards_api.wa_template_redeemed', 'loyalty_redeemed')
-        phone = (partner.mobile or partner.phone or '').replace(' ', '').replace('+', '')
+        phone    = re.sub(r'\D', '', partner.phone or '')
         if not phone_id or not token or not phone:
             return
         try:
