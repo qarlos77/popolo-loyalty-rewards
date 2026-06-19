@@ -10,6 +10,7 @@ class LoyaltySyncLog(models.Model):
 
     external_order_id = fields.Char(string='External Order ID', required=True, index=True)
     source            = fields.Char(string='Source', default='woocommerce', index=True)
+    email             = fields.Char(string='Email sent')
     phone             = fields.Char(string='Phone sent')
     partner_id        = fields.Many2one('res.partner', string='Partner matched', ondelete='set null')
     order_total       = fields.Float(string='Order Total')

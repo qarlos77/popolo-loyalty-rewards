@@ -267,7 +267,11 @@ class Popolo_Admin {
                         default      => '<span class="popolo-badge muted">' . esc_html($row['state']) . '</span>',
                     };
                     $response_data = json_decode($row['odoo_response'] ?? '{}', true);
-                    $detail        = $response_data['error'] ?? ($response_data['note'] ?? '');
+                    $detail = $response_data['error']
+                        ?? $response_data['note']
+                        ?? (in_array($row['state'], ['error', 'no_card'], true)
+                            ? mb_substr(strip_tags($response_data['raw'] ?? wp_json_encode($response_data)), 0, 150)
+                            : '');
                     $order_url     = admin_url('post.php?post=' . $row['order_id'] . '&action=edit');
                     $can_retry     = in_array($row['state'], ['error', 'no_partner', 'skipped'], true);
                     ?>

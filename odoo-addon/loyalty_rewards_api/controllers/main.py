@@ -402,104 +402,112 @@ class LoyaltyAPI(http.Controller):
 
         SyncLog = request.env['loyalty.sync.log'].sudo()
 
-        # --- Idempotency ---
-        duplicate = SyncLog.search([
-            ('external_order_id', '=', order_id),
-            ('source',            '=', source),
-            ('state',             '=', 'synced'),
-        ], limit=1)
-        if duplicate:
-            SyncLog.create({
-                'external_order_id': order_id, 'source': source,
-                'email': email_raw, 'order_total': order_total, 'currency': currency,
-                'state': 'duplicate',
-                'message': f'Order already synced (log id {duplicate.id})',
-            })
-            return _json_response({
-                'error': 'Order already synced', 'duplicate': True,
-                'partner': duplicate.partner_id.name if duplicate.partner_id else None,
-                'points': duplicate.points_awarded,
-            }, 409)
-
-        # --- Match by email, auto-create if not found ---
-        partner = _find_partner_by_email(request.env, email_raw)
-        partner_created = False
-
-        if not partner:
-            name = customer_name or f'Cliente WC #{order_id}'
-            partner = request.env['res.partner'].sudo().create({
-                'name':          name,
-                'email':         email_raw,
-                'phone':         phone_raw or False,
-                'customer_rank': 1,
-            })
-            partner_created = True
-
-        # --- Find or create loyalty card ---
-        cards = request.env['loyalty.card'].sudo().search([('partner_id', '=', partner.id)])
-        if not cards:
-            program = request.env['loyalty.program'].sudo().search([
-                ('program_type', '=', 'loyalty'), ('active', '=', True),
+        try:
+            # --- Idempotency ---
+            duplicate = SyncLog.search([
+                ('external_order_id', '=', order_id),
+                ('source',            '=', source),
+                ('state',             '=', 'synced'),
             ], limit=1)
-            if not program:
+            if duplicate:
                 SyncLog.create({
                     'external_order_id': order_id, 'source': source,
-                    'email': email_raw, 'phone': phone_raw,
-                    'partner_id': partner.id, 'order_total': order_total,
-                    'currency': currency, 'state': 'no_card',
-                    'message': 'No active loyalty program found in Odoo.',
+                    'email': email_raw, 'order_total': order_total, 'currency': currency,
+                    'state': 'duplicate',
+                    'message': f'Order already synced (log id {duplicate.id})',
                 })
-                return _json_response({'error': 'No active loyalty program configured'}, 503)
-            cards = request.env['loyalty.card'].sudo().create({
-                'partner_id': partner.id, 'program_id': program.id, 'points': 0,
-            })
+                return _json_response({
+                    'error': 'Order already synced', 'duplicate': True,
+                    'partner': duplicate.partner_id.name if duplicate.partner_id else None,
+                    'points': duplicate.points_awarded,
+                }, 409)
 
-        card = cards[0] if len(cards) > 1 else cards
+            # --- Match by email, auto-create if not found ---
+            partner = _find_partner_by_email(request.env, email_raw)
+            partner_created = False
 
-        # --- Calculate and award points ---
-        ratio  = float(icp.get_param('loyalty_rewards_api.points_ratio', '0.1'))
-        points = int(order_total * ratio)
+            if not partner:
+                name = customer_name or f'Cliente WC #{order_id}'
+                partner = request.env['res.partner'].sudo().create({
+                    'name':          name,
+                    'email':         email_raw,
+                    'phone':         phone_raw or False,
+                    'customer_rank': 1,
+                })
+                partner_created = True
 
-        if points <= 0:
+            # --- Find or create loyalty card ---
+            cards = request.env['loyalty.card'].sudo().search([('partner_id', '=', partner.id)])
+            if not cards:
+                program = request.env['loyalty.program'].sudo().search([
+                    ('program_type', '=', 'loyalty'), ('active', '=', True),
+                ], limit=1)
+                if not program:
+                    SyncLog.create({
+                        'external_order_id': order_id, 'source': source,
+                        'email': email_raw, 'phone': phone_raw,
+                        'partner_id': partner.id, 'order_total': order_total,
+                        'currency': currency, 'state': 'no_card',
+                        'message': 'No active loyalty program found in Odoo.',
+                    })
+                    return _json_response({'error': 'No active loyalty program configured'}, 503)
+                cards = request.env['loyalty.card'].sudo().create({
+                    'partner_id': partner.id, 'program_id': program.id, 'points': 0,
+                })
+
+            card = cards[0] if len(cards) > 1 else cards
+
+            # --- Calculate and award points ---
+            ratio  = float(icp.get_param('loyalty_rewards_api.points_ratio', '0.1'))
+            points = int(order_total * ratio)
+
+            if points <= 0:
+                SyncLog.create({
+                    'external_order_id': order_id, 'source': source,
+                    'email': email_raw, 'phone': phone_raw, 'partner_id': partner.id,
+                    'order_total': order_total, 'currency': currency,
+                    'points_awarded': 0, 'state': 'synced',
+                    'message': f'Total {order_total} debajo del mínimo (ratio={ratio}).',
+                })
+                return _json_response({
+                    'success': True, 'points_awarded': 0,
+                    'total_points': card.points, 'partner_created': partner_created,
+                    'note': f'Monto mínimo para ganar puntos: {int(1/ratio)} {currency}',
+                })
+
+            card.sudo().write({'points': card.points + points})
+            try:
+                request.env['loyalty.history'].sudo().create({
+                    'card_id': card.id, 'description': f'Compra por la web #{order_id}',
+                    'issued': points, 'used': 0,
+                })
+            except Exception:
+                pass  # history log is optional; don't roll back the points update
+
+            created_note = ' (contacto creado automáticamente)' if partner_created else ''
             SyncLog.create({
                 'external_order_id': order_id, 'source': source,
                 'email': email_raw, 'phone': phone_raw, 'partner_id': partner.id,
                 'order_total': order_total, 'currency': currency,
-                'points_awarded': 0, 'state': 'synced',
-                'message': f'Total {order_total} debajo del mínimo (ratio={ratio}).',
+                'points_awarded': points, 'state': 'synced',
+                'message': f'OK — {points} pts. Saldo: {card.points}{created_note}',
             })
+
+            self._notify_whatsapp_earned(partner, points, card.points)
+
             return _json_response({
-                'success': True, 'points_awarded': 0,
-                'total_points': card.points, 'partner_created': partner_created,
-                'note': f'Monto mínimo para ganar puntos: {int(1/ratio)} {currency}',
+                'success':         True,
+                'partner_name':    partner.name,
+                'partner_email':   partner.email,
+                'partner_created': partner_created,
+                'points_awarded':  points,
+                'total_points':    card.points,
+                'card_code':       card.code,
             })
 
-        card.sudo().write({'points': card.points + points})
-        request.env['loyalty.history'].sudo().create({
-            'card_id': card.id, 'description': f'Compra por la web #{order_id}',
-            'issued': points, 'used': 0,
-        })
-
-        created_note = ' (contacto creado automáticamente)' if partner_created else ''
-        SyncLog.create({
-            'external_order_id': order_id, 'source': source,
-            'email': email_raw, 'phone': phone_raw, 'partner_id': partner.id,
-            'order_total': order_total, 'currency': currency,
-            'points_awarded': points, 'state': 'synced',
-            'message': f'OK — {points} pts. Saldo: {card.points}{created_note}',
-        })
-
-        self._notify_whatsapp_earned(partner, points, card.points)
-
-        return _json_response({
-            'success':         True,
-            'partner_name':    partner.name,
-            'partner_email':   partner.email,
-            'partner_created': partner_created,
-            'points_awarded':  points,
-            'total_points':    card.points,
-            'card_code':       card.code,
-        })
+        except Exception as exc:
+            request.env.cr.rollback()
+            return _json_response({'error': f'Internal error: {exc}'}, 500)
 
     # ── WhatsApp helpers ─────────────────────────────────────────────────────
     def _notify_whatsapp_earned(self, partner, points_earned, total_points):
