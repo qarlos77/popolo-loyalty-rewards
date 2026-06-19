@@ -40,6 +40,19 @@
                         </setting>
                     </block>
 
+                    <block title="Beneficio de Cumpleaños">
+                        <setting string="Producto de regalo"
+                                 help="Producto que se entrega físicamente al cliente en su cumpleaños. Solo canjeable en el local.">
+                            <field name="loyalty_birthday_product_id"
+                                   options="{'no_create': True, 'no_open': True}"
+                                   placeholder="Selecciona un producto…"/>
+                        </setting>
+                        <setting string="Días de vigencia"
+                                 help="Número de días después del cumpleaños en que el beneficio sigue disponible.">
+                            <field name="loyalty_birthday_window_days"/>
+                        </setting>
+                    </block>
+
                     <block title="WhatsApp (Meta Cloud API)">
                         <setting string="Phone Number ID">
                             <field name="loyalty_wa_phone_id" placeholder="1234567890"/>

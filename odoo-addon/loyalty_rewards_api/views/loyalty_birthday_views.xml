@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- ── List view ──────────────────────────────────────────────────────── -->
+    <record id="view_loyalty_birthday_redemption_list" model="ir.ui.view">
+        <field name="name">loyalty.birthday.redemption.list</field>
+        <field name="model">loyalty.birthday.redemption</field>
+        <field name="arch" type="xml">
+            <list string="Canjes de Cumpleaños" create="false" edit="false">
+                <field name="redeemed_at" string="Fecha"/>
+                <field name="partner_id" string="Cliente"/>
+                <field name="year"       string="Año"/>
+                <field name="product_name" string="Producto regalado"/>
+                <field name="redeemed_by"  string="Canjeado por"/>
+                <field name="notes"        string="Notas"/>
+            </list>
+        </field>
+    </record>
+
+    <!-- ── Form view ──────────────────────────────────────────────────────── -->
+    <record id="view_loyalty_birthday_redemption_form" model="ir.ui.view">
+        <field name="name">loyalty.birthday.redemption.form</field>
+        <field name="model">loyalty.birthday.redemption</field>
+        <field name="arch" type="xml">
+            <form string="Canje de Cumpleaños">
+                <sheet>
+                    <group>
+                        <group string="Cliente">
+                            <field name="partner_id"/>
+                            <field name="year"/>
+                            <field name="redeemed_at"/>
+                        </group>
+                        <group string="Producto">
+                            <field name="product_id"/>
+                            <field name="product_name"/>
+                        </group>
+                    </group>
+                    <group string="Registro">
+                        <field name="redeemed_by"/>
+                        <field name="notes"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- ── Search view ────────────────────────────────────────────────────── -->
+    <record id="view_loyalty_birthday_redemption_search" model="ir.ui.view">
+        <field name="name">loyalty.birthday.redemption.search</field>
+        <field name="model">loyalty.birthday.redemption</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="partner_id" string="Cliente"/>
+                <field name="year"       string="Año"/>
+                <filter name="current_year" string="Año actual"
+                        domain="[('year', '=', context_today().year)]"/>
+            </search>
+        </field>
+    </record>
+
+    <!-- ── Action ─────────────────────────────────────────────────────────── -->
+    <record id="action_loyalty_birthday_redemption" model="ir.actions.act_window">
+        <field name="name">Canjes de Cumpleaños</field>
+        <field name="res_model">loyalty.birthday.redemption</field>
+        <field name="view_mode">list,form</field>
+        <field name="search_view_id" ref="view_loyalty_birthday_redemption_search"/>
+    </record>
+
+    <!-- ── Menu item ──────────────────────────────────────────────────────── -->
+    <menuitem id="menu_loyalty_birthday_redemption"
+              name="Canjes de Cumpleaños"
+              parent="website_sale_loyalty.menu_loyalty"
+              action="action_loyalty_birthday_redemption"
+              sequence="30"/>
+
+    <!-- ── Extend res.partner form: add birthday field ────────────────────── -->
+    <record id="view_partner_loyalty_birthday" model="ir.ui.view">
+        <field name="name">res.partner.loyalty.birthday</field>
+        <field name="model">res.partner</field>
+        <field name="inherit_id" ref="base.view_partner_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='phone']" position="after">
+                <field name="loyalty_birth_date" string="Fecha de nacimiento"/>
+            </xpath>
+        </field>
+    </record>
+
+</odoo>

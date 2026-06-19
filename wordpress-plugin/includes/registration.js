@@ -17,13 +17,14 @@
         $('#popolo-register-form').on('submit', function (e) {
             e.preventDefault();
 
-            var name     = $('#loyalty_name').val().trim();
-            var lastname = $('#loyalty_lastname').val().trim();
-            var email    = $('#loyalty_email').val().trim();
-            var phone    = $('#loyalty_phone').val().trim();
+            var name       = $('#loyalty_name').val().trim();
+            var lastname   = $('#loyalty_lastname').val().trim();
+            var email      = $('#loyalty_email').val().trim();
+            var phone      = $('#loyalty_phone').val().trim();
+            var birth_date = $('#loyalty_birth_date').val().trim();
 
-            if (!name || !email || !phone) {
-                showMessage('Por favor completa los campos obligatorios (Nombre, Correo y Teléfono).', 'error');
+            if (!name || !email || !phone || !birth_date) {
+                showMessage('Por favor completa los campos obligatorios (Nombre, Correo, Teléfono y Fecha de nacimiento).', 'error');
                 return;
             }
 
@@ -38,6 +39,7 @@
                 lastname:    lastname,
                 email:       email,
                 phone:       phone,
+                birth_date:  birth_date,
             })
             .done(function (data) {
                 if (data.success) {

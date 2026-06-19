@@ -73,6 +73,12 @@ class Popolo_Registration {
                     <label for="loyalty_phone">Teléfono <span class="required">*</span></label>
                     <input type="tel" id="loyalty_phone" name="loyalty_phone" class="input-text" required>
                 </p>
+                <p class="form-row form-row-wide">
+                    <label for="loyalty_birth_date">Fecha de nacimiento <span class="required">*</span></label>
+                    <input type="date" id="loyalty_birth_date" name="loyalty_birth_date" class="input-text"
+                           max="<?= esc_attr(date('Y-m-d')) ?>" required>
+                    <span class="description" style="font-size:12px;color:#777;">Para recibir tu beneficio de cumpleaños en el local.</span>
+                </p>
                 <p class="form-row">
                     <button type="submit" id="popolo-register-submit" class="button alt">
                         Registrarme
@@ -87,16 +93,22 @@ class Popolo_Registration {
     public function ajax_register(): void {
         check_ajax_referer('popolo_loyalty_register');
 
-        $name     = sanitize_text_field($_POST['name']     ?? '');
-        $lastname = sanitize_text_field($_POST['lastname'] ?? '');
-        $email    = sanitize_email($_POST['email']         ?? '');
-        $phone    = sanitize_text_field($_POST['phone']    ?? '');
+        $name       = sanitize_text_field($_POST['name']       ?? '');
+        $lastname   = sanitize_text_field($_POST['lastname']   ?? '');
+        $email      = sanitize_email($_POST['email']           ?? '');
+        $phone      = sanitize_text_field($_POST['phone']      ?? '');
+        $birth_date = sanitize_text_field($_POST['birth_date'] ?? '');
 
-        if (empty($name) || !is_email($email) || empty($phone)) {
+        // Validate birth_date format YYYY-MM-DD
+        if ($birth_date && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $birth_date)) {
+            $birth_date = '';
+        }
+
+        if (empty($name) || !is_email($email) || empty($phone) || empty($birth_date)) {
             wp_send_json([
                 'success'        => false,
                 'already_member' => false,
-                'message'        => 'Por favor completa todos los campos requeridos.',
+                'message'        => 'Por favor completa todos los campos requeridos, incluida la fecha de nacimiento.',
             ]);
         }
 
@@ -117,6 +129,7 @@ class Popolo_Registration {
             'last_name'      => $lastname,
             'email'          => strtolower($email),
             'phone'          => preg_replace('/[\s\-\(\)\+]/', '', $phone),
+            'birth_date'     => $birth_date,
             'welcome_points' => (int) get_option('popolo_loyalty_welcome_points', 10),
         ]);
 
@@ -155,6 +168,9 @@ class Popolo_Registration {
                     update_user_meta($user_id, 'billing_last_name',  $lastname);
                     update_user_meta($user_id, 'billing_email',      $email);
                     update_user_meta($user_id, 'billing_phone',      preg_replace('/[\s\-\(\)\+]/', '', $phone));
+                    if ($birth_date) {
+                        update_user_meta($user_id, '_loyalty_birth_date', $birth_date);
+                    }
                 }
             } else {
                 $wc_note = ' Tu cuenta de WooCommerce ya existe.';

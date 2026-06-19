@@ -107,6 +107,59 @@ class Popolo_API_Client {
     }
 
     /**
+     * Check birthday status for a customer email.
+     */
+    public function birthday_status(string $email): array {
+        $url = $this->base_url . '/api/loyalty/birthday-status?' . http_build_query(['email' => $email]);
+
+        $response = wp_remote_get($url, [
+            'timeout' => 8,
+            'headers' => ['X-API-Key' => $this->api_key],
+        ]);
+
+        if (is_wp_error($response)) {
+            return ['error' => $response->get_error_message()];
+        }
+
+        $code = wp_remote_retrieve_response_code($response);
+        $body = json_decode(wp_remote_retrieve_body($response), true);
+
+        if ($code !== 200) {
+            return ['error' => $body['error'] ?? "HTTP {$code}"];
+        }
+        return $body;
+    }
+
+    /**
+     * Redeem birthday gift (in-store cashier action).
+     */
+    public function birthday_redeem(string $email, string $cashier = '', string $notes = ''): array {
+        $url = $this->base_url . '/api/loyalty/birthday-redeem';
+
+        $response = wp_remote_post($url, [
+            'timeout' => 10,
+            'headers' => [
+                'Content-Type' => 'application/json',
+                'X-API-Key'    => $this->api_key,
+            ],
+            'body' => wp_json_encode([
+                'email'   => $email,
+                'cashier' => $cashier,
+                'notes'   => $notes,
+            ]),
+        ]);
+
+        if (is_wp_error($response)) {
+            return ['success' => false, 'error' => $response->get_error_message()];
+        }
+
+        $code = wp_remote_retrieve_response_code($response);
+        $body = json_decode(wp_remote_retrieve_body($response), true) ?? [];
+
+        return array_merge(['success' => $code === 200, 'http_code' => $code], $body);
+    }
+
+    /**
      * Test connectivity: calls Odoo /web/health.
      */
     public function test_connection(): array {

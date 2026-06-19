@@ -13,11 +13,13 @@ class Popolo_Admin {
     }
 
     private function __construct() {
-        add_action('admin_menu',            [$this, 'add_menu']);
-        add_action('admin_init',            [$this, 'register_settings']);
-        add_action('wp_ajax_popolo_test',   [$this, 'ajax_test']);
-        add_action('wp_ajax_popolo_retry',  [$this, 'ajax_retry']);
-        add_action('admin_enqueue_scripts', [$this, 'enqueue_assets']);
+        add_action('admin_menu',                       [$this, 'add_menu']);
+        add_action('admin_init',                       [$this, 'register_settings']);
+        add_action('wp_ajax_popolo_test',              [$this, 'ajax_test']);
+        add_action('wp_ajax_popolo_retry',             [$this, 'ajax_retry']);
+        add_action('wp_ajax_popolo_birthday_status',   [$this, 'ajax_birthday_status']);
+        add_action('wp_ajax_popolo_birthday_redeem',   [$this, 'ajax_birthday_redeem']);
+        add_action('admin_enqueue_scripts',            [$this, 'enqueue_assets']);
     }
 
     /* ── Menu ─────────────────────────────────────────────────────────── */
@@ -32,6 +34,14 @@ class Popolo_Admin {
         );
         add_submenu_page(
             'woocommerce',
+            'Loyalty — Cumpleaños',
+            'Loyalty Cumpleaños',
+            'manage_woocommerce',
+            'popolo-loyalty-birthday',
+            [$this, 'render_birthday_page']
+        );
+        add_submenu_page(
+            'woocommerce',
             'Loyalty — Log de Sincronización',
             'Loyalty Log',
             'manage_woocommerce',
@@ -42,17 +52,23 @@ class Popolo_Admin {
 
     /* ── Settings ─────────────────────────────────────────────────────── */
     public function register_settings(): void {
-        register_setting('popolo_loyalty_group', 'popolo_loyalty_odoo_url',      ['sanitize_callback' => 'esc_url_raw']);
-        register_setting('popolo_loyalty_group', 'popolo_loyalty_api_key',       ['sanitize_callback' => 'sanitize_text_field']);
-        register_setting('popolo_loyalty_group', 'popolo_loyalty_trigger_status',['sanitize_callback' => 'sanitize_text_field']);
-        register_setting('popolo_loyalty_group', 'popolo_loyalty_enabled',        ['sanitize_callback' => 'absint']);
-        register_setting('popolo_loyalty_group', 'popolo_loyalty_phone_field',   ['sanitize_callback' => 'sanitize_text_field']);
-        register_setting('popolo_loyalty_group', 'popolo_loyalty_welcome_points',['sanitize_callback' => 'absint']);
+        register_setting('popolo_loyalty_group', 'popolo_loyalty_odoo_url',        ['sanitize_callback' => 'esc_url_raw']);
+        register_setting('popolo_loyalty_group', 'popolo_loyalty_api_key',         ['sanitize_callback' => 'sanitize_text_field']);
+        register_setting('popolo_loyalty_group', 'popolo_loyalty_trigger_status',  ['sanitize_callback' => 'sanitize_text_field']);
+        register_setting('popolo_loyalty_group', 'popolo_loyalty_enabled',         ['sanitize_callback' => 'absint']);
+        register_setting('popolo_loyalty_group', 'popolo_loyalty_phone_field',     ['sanitize_callback' => 'sanitize_text_field']);
+        register_setting('popolo_loyalty_group', 'popolo_loyalty_welcome_points',  ['sanitize_callback' => 'absint']);
+        register_setting('popolo_loyalty_group', 'popolo_loyalty_birthday_product',['sanitize_callback' => 'absint']);
     }
 
     /* ── Assets ───────────────────────────────────────────────────────── */
     public function enqueue_assets(string $hook): void {
-        if (!in_array($hook, ['woocommerce_page_popolo-loyalty-sync', 'woocommerce_page_popolo-loyalty-log'], true)) {
+        $pages = [
+            'woocommerce_page_popolo-loyalty-sync',
+            'woocommerce_page_popolo-loyalty-log',
+            'woocommerce_page_popolo-loyalty-birthday',
+        ];
+        if (!in_array($hook, $pages, true)) {
             return;
         }
         wp_enqueue_style('popolo-loyalty-admin', POPOLO_LOYALTY_PLUGIN_URL . 'admin/admin.css', [], POPOLO_LOYALTY_VERSION);
@@ -148,7 +164,28 @@ class Popolo_Admin {
                             <input type="number" id="popolo_welcome_points" name="popolo_loyalty_welcome_points"
                                    value="<?= (int) get_option('popolo_loyalty_welcome_points', 10) ?>"
                                    min="0" class="small-text">
-                            <p class="description">Puntos otorgados al cliente por registrarse en el programa de lealtad (registro en página o checkbox en checkout).</p>
+                            <p class="description">Puntos otorgados al cliente por registrarse en el programa de lealtad.</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th><label for="popolo_birthday_product">Producto de regalo de cumpleaños</label></th>
+                        <td>
+                            <?php
+                            $bday_product_id = (int) get_option('popolo_loyalty_birthday_product', 0);
+                            $products = wc_get_products(['limit' => 200, 'status' => 'publish', 'orderby' => 'title', 'order' => 'ASC']);
+                            ?>
+                            <select id="popolo_birthday_product" name="popolo_loyalty_birthday_product">
+                                <option value="0">— Sin producto configurado —</option>
+                                <?php foreach ($products as $product): ?>
+                                <option value="<?= $product->get_id() ?>" <?= selected($bday_product_id, $product->get_id(), false) ?>>
+                                    <?= esc_html($product->get_name()) ?> (ID: <?= $product->get_id() ?>)
+                                </option>
+                                <?php endforeach; ?>
+                            </select>
+                            <p class="description">
+                                Producto que se entrega físicamente al cliente en su cumpleaños. <strong>Solo canjeable en el local.</strong><br>
+                                También configura el mismo producto en <em>Odoo → Ajustes → Loyalty Rewards API → Beneficio de Cumpleaños</em>.
+                            </p>
                         </td>
                     </tr>
                 </table>
@@ -204,6 +241,214 @@ class Popolo_Admin {
         });
         </script>
         <?php
+    }
+
+    /* ── Birthday panel page ──────────────────────────────────────────── */
+    public function render_birthday_page(): void {
+        $odoo_url = get_option('popolo_loyalty_odoo_url', '');
+        $api_key  = get_option('popolo_loyalty_api_key', '');
+        $nonce_s  = wp_create_nonce('popolo_birthday_status');
+        $nonce_r  = wp_create_nonce('popolo_birthday_redeem');
+        ?>
+        <div class="wrap popolo-wrap">
+            <h1>Loyalty — Beneficio de Cumpleaños</h1>
+            <p class="description">Consulta el estado del beneficio de un cliente e inicia el canje en el local físico.</p>
+
+            <?php if (empty($odoo_url) || empty($api_key)): ?>
+            <div class="notice notice-error"><p>Configura la URL de Odoo y la API Key en <a href="<?= admin_url('admin.php?page=popolo-loyalty-sync') ?>">Loyalty Sync</a> antes de usar este panel.</p></div>
+            <?php else: ?>
+
+            <!-- Lookup form -->
+            <div class="popolo-birthday-panel" style="max-width:520px;">
+                <div style="display:flex;gap:8px;align-items:flex-end;margin-bottom:16px;">
+                    <div style="flex:1;">
+                        <label for="birthday-email" style="display:block;margin-bottom:4px;font-weight:600;">Correo del cliente</label>
+                        <input type="email" id="birthday-email" class="regular-text" placeholder="correo@ejemplo.com" style="width:100%;">
+                    </div>
+                    <button id="birthday-lookup-btn" class="button button-primary">Consultar</button>
+                </div>
+                <div id="birthday-result" style="display:none;"></div>
+            </div>
+
+            <script>
+            (function() {
+                var ajaxurl  = '<?= admin_url('admin-ajax.php') ?>';
+                var nonceS   = '<?= $nonce_s ?>';
+                var nonceR   = '<?= $nonce_r ?>';
+
+                function esc(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+                function renderResult(data) {
+                    var bday = data.birthday || {};
+                    var daysText = (bday.days_to_birthday === 0)
+                        ? '<strong style="color:#d63638;">¡Hoy es su cumpleaños! 🎂</strong>'
+                        : (bday.days_to_birthday !== null && bday.days_to_birthday !== undefined)
+                            ? 'Faltan <strong>' + bday.days_to_birthday + '</strong> día(s) para su cumpleaños'
+                            : '<em>Sin fecha de nacimiento registrada</em>';
+
+                    var statusBadge = '';
+                    if (!bday.has_birth_date) {
+                        statusBadge = '<span style="background:#f0f0f1;padding:2px 8px;border-radius:4px;">Sin fecha</span>';
+                    } else if (bday.benefit_used_this_year) {
+                        statusBadge = '<span style="background:#f0f0f1;color:#666;padding:2px 8px;border-radius:4px;">Ya canjeado ' + new Date().getFullYear() + '</span>';
+                    } else if (bday.benefit_available) {
+                        statusBadge = '<span style="background:#00a32a;color:#fff;padding:2px 8px;border-radius:4px;">✓ Disponible para canjear</span>';
+                    } else {
+                        statusBadge = '<span style="background:#dba617;color:#fff;padding:2px 8px;border-radius:4px;">No disponible aún</span>';
+                    }
+
+                    var product = data.gift_product ? '<strong>' + esc(data.gift_product) + '</strong>' : '<em>No configurado en Odoo</em>';
+
+                    var html = '<div style="border:1px solid #c3c4c7;border-radius:4px;padding:16px;background:#fff;">'
+                        + '<h3 style="margin-top:0;">' + esc(data.partner_name) + '</h3>'
+                        + '<p style="margin:4px 0;">' + esc(data.email) + '</p>'
+                        + '<table style="width:100%;border-collapse:collapse;margin-top:12px;">'
+                        + '<tr><td style="padding:6px 0;color:#666;width:160px;">Cumpleaños</td><td>' + daysText + '</td></tr>'
+                        + '<tr><td style="padding:6px 0;color:#666;">Estado beneficio</td><td>' + statusBadge + '</td></tr>'
+                        + '<tr><td style="padding:6px 0;color:#666;">Producto a regalar</td><td>' + product + '</td></tr>'
+                        + '</table>';
+
+                    if (bday.benefit_available) {
+                        html += '<div style="margin-top:16px;padding-top:12px;border-top:1px solid #e0e0e0;">'
+                            + '<p style="margin:0 0 8px;font-weight:600;">Confirmar canje en el local</p>'
+                            + '<div style="display:flex;gap:8px;">'
+                            + '<input type="text" id="cashier-name" placeholder="Nombre del cajero" class="regular-text" style="flex:1;">'
+                            + '<button id="birthday-redeem-btn" class="button button-primary" data-email="' + esc(data.email) + '">Canjear regalo</button>'
+                            + '</div>'
+                            + '</div>';
+                    }
+
+                    html += '</div>';
+
+                    var $result = document.getElementById('birthday-result');
+                    $result.innerHTML = html;
+                    $result.style.display = 'block';
+
+                    var redeemBtn = document.getElementById('birthday-redeem-btn');
+                    if (redeemBtn) {
+                        redeemBtn.addEventListener('click', function() {
+                            var email   = this.dataset.email;
+                            var cashier = (document.getElementById('cashier-name').value || '').trim();
+                            if (!cashier) { alert('Ingresa el nombre del cajero.'); return; }
+                            if (!confirm('¿Confirmas el canje del regalo de cumpleaños para ' + esc(data.partner_name) + '?')) return;
+                            this.disabled = true;
+                            this.textContent = 'Procesando…';
+
+                            fetch(ajaxurl, {
+                                method: 'POST',
+                                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                                body: new URLSearchParams({
+                                    action: 'popolo_birthday_redeem',
+                                    _ajax_nonce: nonceR,
+                                    email:   email,
+                                    cashier: cashier,
+                                }),
+                            })
+                            .then(r => r.json())
+                            .then(function(res) {
+                                if (res.success) {
+                                    $result.innerHTML = '<div class="notice notice-success" style="padding:12px 16px;">'
+                                        + '<p style="margin:0;font-size:15px;">✓ <strong>Canje exitoso</strong> — '
+                                        + esc(res.product_name) + ' entregado a <strong>' + esc(res.partner_name) + '</strong>.</p>'
+                                        + '</div>';
+                                } else {
+                                    alert('Error: ' + (res.error || 'Error desconocido'));
+                                    location.reload();
+                                }
+                            })
+                            .catch(function() { alert('Error de conexión'); location.reload(); });
+                        });
+                    }
+                }
+
+                document.getElementById('birthday-lookup-btn').addEventListener('click', function() {
+                    var email = document.getElementById('birthday-email').value.trim().toLowerCase();
+                    if (!email) { alert('Ingresa un correo electrónico.'); return; }
+                    var btn = this;
+                    btn.disabled = true;
+                    btn.textContent = 'Consultando…';
+                    document.getElementById('birthday-result').style.display = 'none';
+
+                    fetch(ajaxurl, {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                        body: new URLSearchParams({
+                            action: 'popolo_birthday_status',
+                            _ajax_nonce: nonceS,
+                            email: email,
+                        }),
+                    })
+                    .then(r => r.json())
+                    .then(function(data) {
+                        btn.disabled = false;
+                        btn.textContent = 'Consultar';
+                        if (data.error) {
+                            document.getElementById('birthday-result').innerHTML =
+                                '<div class="notice notice-error" style="padding:8px 12px;"><p style="margin:0;">' + esc(data.error) + '</p></div>';
+                            document.getElementById('birthday-result').style.display = 'block';
+                        } else {
+                            renderResult(data);
+                        }
+                    })
+                    .catch(function() {
+                        btn.disabled = false;
+                        btn.textContent = 'Consultar';
+                        alert('Error de conexión');
+                    });
+                });
+
+                // Allow Enter key in email field
+                document.getElementById('birthday-email').addEventListener('keydown', function(e) {
+                    if (e.key === 'Enter') document.getElementById('birthday-lookup-btn').click();
+                });
+            })();
+            </script>
+            <?php endif; ?>
+        </div>
+        <?php
+    }
+
+    /* ── AJAX: birthday status ────────────────────────────────────────── */
+    public function ajax_birthday_status(): void {
+        check_ajax_referer('popolo_birthday_status');
+        if (!current_user_can('manage_woocommerce')) wp_die('Forbidden', 403);
+
+        $email    = sanitize_email($_POST['email'] ?? '');
+        $odoo_url = get_option('popolo_loyalty_odoo_url', '');
+        $api_key  = get_option('popolo_loyalty_api_key', '');
+
+        if (!is_email($email)) {
+            wp_send_json(['error' => 'Correo inválido']);
+        }
+        if (empty($odoo_url) || empty($api_key)) {
+            wp_send_json(['error' => 'Plugin no configurado']);
+        }
+
+        $client = new Popolo_API_Client($odoo_url, $api_key);
+        $result = $client->birthday_status($email);
+        wp_send_json($result);
+    }
+
+    /* ── AJAX: birthday redeem ────────────────────────────────────────── */
+    public function ajax_birthday_redeem(): void {
+        check_ajax_referer('popolo_birthday_redeem');
+        if (!current_user_can('manage_woocommerce')) wp_die('Forbidden', 403);
+
+        $email    = sanitize_email($_POST['email']   ?? '');
+        $cashier  = sanitize_text_field($_POST['cashier'] ?? '');
+        $odoo_url = get_option('popolo_loyalty_odoo_url', '');
+        $api_key  = get_option('popolo_loyalty_api_key', '');
+
+        if (!is_email($email) || empty($cashier)) {
+            wp_send_json(['success' => false, 'error' => 'Datos inválidos']);
+        }
+        if (empty($odoo_url) || empty($api_key)) {
+            wp_send_json(['success' => false, 'error' => 'Plugin no configurado']);
+        }
+
+        $client = new Popolo_API_Client($odoo_url, $api_key);
+        $result = $client->birthday_redeem($email, $cashier);
+        wp_send_json($result);
     }
 
     /* ── Log page ─────────────────────────────────────────────────────── */

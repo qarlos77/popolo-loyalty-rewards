@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import secrets
 import string
-from odoo import fields, models
+from odoo import api, fields, models
 
 _ALPHABET = string.ascii_letters + string.digits  # a-z A-Z 0-9
 
@@ -54,6 +54,33 @@ class ResConfigSettings(models.TransientModel):
         default=10,
         help='Puntos otorgados al cliente al registrarse por primera vez en el programa de lealtad.',
     )
+
+    # ── Birthday benefit ──────────────────────────────────────────────────────
+    loyalty_birthday_product_id = fields.Many2one(
+        'product.template',
+        string='Producto de regalo de cumpleaños',
+        help='Producto que se entrega físicamente al cliente en su cumpleaños.',
+    )
+    loyalty_birthday_window_days = fields.Integer(
+        string='Días de vigencia del beneficio',
+        config_parameter='loyalty_rewards_api.birthday_window_days',
+        default=30,
+        help='Días después del cumpleaños en que el beneficio sigue disponible.',
+    )
+
+    def get_values(self):
+        res = super().get_values()
+        icp = self.env['ir.config_parameter'].sudo()
+        pid = icp.get_param('loyalty_rewards_api.birthday_product_id', '')
+        res['loyalty_birthday_product_id'] = int(pid) if pid and pid.isdigit() else False
+        return res
+
+    def set_values(self):
+        super().set_values()
+        self.env['ir.config_parameter'].sudo().set_param(
+            'loyalty_rewards_api.birthday_product_id',
+            self.loyalty_birthday_product_id.id if self.loyalty_birthday_product_id else '',
+        )
 
     def action_generate_sync_api_key(self):
         key = ''.join(secrets.choice(_ALPHABET) for _ in range(16))
