@@ -17,17 +17,17 @@
 
                     <block title="WooCommerce / Integración externa">
                         <setting string="Sync API Key"
-                                 help="Clave secreta compartida con WooCommerce. Cópiala en el plugin de WordPress.">
+                                 help="Clave compartida con WooCommerce. Cópiala en el plugin de WordPress.">
                             <div class="d-flex align-items-center gap-2 w-100">
                                 <field name="loyalty_sync_api_key"
-                                       password="True"
+                                       widget="CopyClipboardChar"
                                        placeholder="Haz clic en Generar →"
-                                       class="flex-grow-1"/>
+                                       class="flex-grow-1 font-monospace"/>
                                 <button type="object"
                                         name="action_generate_sync_api_key"
                                         string="Generar"
                                         class="btn btn-secondary btn-sm"
-                                        title="Genera una clave aleatoria segura y la guarda automáticamente"/>
+                                        title="Genera una clave de 16 caracteres y la guarda automáticamente"/>
                             </div>
                         </setting>
                         <setting string="Puntos por unidad de moneda"

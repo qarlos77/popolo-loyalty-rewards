@@ -1,12 +1,14 @@
 # -*- coding: utf-8 -*-
 import secrets
+import string
 from odoo import fields, models
+
+_ALPHABET = string.ascii_letters + string.digits  # a-z A-Z 0-9
 
 
 class ResConfigSettings(models.TransientModel):
     _inherit = 'res.config.settings'
 
-    # WhatsApp (Meta Cloud API)
     loyalty_wa_phone_id = fields.Char(
         string='WhatsApp Phone Number ID',
         config_parameter='loyalty_rewards_api.wa_phone_id',
@@ -25,8 +27,6 @@ class ResConfigSettings(models.TransientModel):
         config_parameter='loyalty_rewards_api.wa_template_earned',
         default='loyalty_earned',
     )
-
-    # App settings
     loyalty_app_url = fields.Char(
         string='Rewards App URL',
         config_parameter='loyalty_rewards_api.app_url',
@@ -37,12 +37,10 @@ class ResConfigSettings(models.TransientModel):
         config_parameter='loyalty_rewards_api.pin_required',
         default=False,
     )
-
-    # WooCommerce / external sync
     loyalty_sync_api_key = fields.Char(
         string='Sync API Key',
         config_parameter='loyalty_rewards_api.sync_api_key',
-        help='Clave secreta que WooCommerce envía en el header X-API-Key.',
+        help='Clave compartida con WooCommerce. Cópiala en el plugin de WordPress.',
     )
     loyalty_points_ratio = fields.Float(
         string='Puntos por unidad de moneda',
@@ -52,24 +50,9 @@ class ResConfigSettings(models.TransientModel):
     )
 
     def action_generate_sync_api_key(self):
-        """Generate a cryptographically secure API key and save it immediately."""
-        key = secrets.token_hex(32)
-
-        # Persist directly so it survives without needing the Save button
+        key = ''.join(secrets.choice(_ALPHABET) for _ in range(16))
         self.env['ir.config_parameter'].sudo().set_param(
             'loyalty_rewards_api.sync_api_key', key
         )
-        # Also set on the transient record so the field reflects it
         self.loyalty_sync_api_key = key
-
-        return {
-            'type': 'ir.actions.client',
-            'tag': 'display_notification',
-            'params': {
-                'title': 'API Key generada y guardada',
-                'message': key,
-                'type': 'success',
-                'sticky': True,
-                'next': {'type': 'ir.actions.client', 'tag': 'reload'},
-            },
-        }
+        return {'type': 'ir.actions.client', 'tag': 'reload'}
