@@ -1,14 +1,14 @@
 (function ($) {
     'use strict';
 
-    var timer    = null;
-    var lastPhone = '';
+    var timer     = null;
+    var lastEmail = '';
 
-    function lookupPoints(phone) {
+    function lookupPoints(email) {
         $.post(popoloLoyalty.ajaxurl, {
             action:      'popolo_get_points',
             _ajax_nonce: popoloLoyalty.nonce,
-            phone:       phone,
+            email:       email,
         })
         .done(function (data) {
             if (data && data.found) {
@@ -23,7 +23,7 @@
     }
 
     function showWidget(name, points) {
-        var msg = '🍕 Hola <strong>' + esc(name) + '</strong> — tienes <strong>' + esc(points) + ' puntos</strong> de fidelidad acumulados.';
+        var msg = 'Hola <strong>' + esc(name) + '</strong> — tienes <strong>' + esc(points) + ' puntos</strong> de fidelidad acumulados.';
         $('#popolo-points-widget').html(msg).slideDown(250);
     }
 
@@ -37,25 +37,27 @@
         });
     }
 
+    function isValidEmail(val) {
+        return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val);
+    }
+
     $(function () {
-        var fieldId = '#' + (popoloLoyalty.phone_field || 'billing_phone');
+        $(document).on('input change', '#billing_email', function () {
+            var email = $(this).val().trim().toLowerCase();
 
-        $(document).on('input change', fieldId, function () {
-            var digits = $(this).val().replace(/\D/g, '');
-
-            if (digits === lastPhone) return;
-            lastPhone = digits;
+            if (email === lastEmail) return;
+            lastEmail = email;
 
             clearTimeout(timer);
 
-            if (digits.length < 7) {
+            if (!isValidEmail(email)) {
                 hideWidget();
                 return;
             }
 
             timer = setTimeout(function () {
-                lookupPoints(digits);
-            }, 600);
+                lookupPoints(email);
+            }, 700);
         });
     });
 }(jQuery));

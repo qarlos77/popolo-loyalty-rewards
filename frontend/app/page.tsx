@@ -1,13 +1,13 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowRight, Loader2, Phone } from 'lucide-react'
+import { ArrowRight, Loader2, Mail } from 'lucide-react'
 import { odoo } from '@/lib/odoo'
 import { saveSession, getSession } from '@/lib/auth'
 
 export default function LoginPage() {
   const router = useRouter()
-  const [phone, setPhone] = useState('')
+  const [email, setEmail] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [checking, setChecking] = useState(true)
@@ -22,7 +22,7 @@ export default function LoginPage() {
     setError('')
     setLoading(true)
     try {
-      const res = await odoo.auth(phone.trim(), navigator.userAgent.slice(0, 80))
+      const res = await odoo.auth(email.trim().toLowerCase(), navigator.userAgent.slice(0, 80))
       saveSession({ token: res.token, expires_at: res.expires_at, partner: res.partner })
       router.replace('/dashboard')
     } catch (err: unknown) {
@@ -121,7 +121,7 @@ export default function LoginPage() {
               Bienvenido
             </h2>
             <p className="text-sm mt-1" style={{ color: 'var(--fg-muted)' }}>
-              Ingresa tu número para ver tus puntos
+              Ingresa tu correo para ver tus puntos
             </p>
           </div>
 
@@ -129,23 +129,23 @@ export default function LoginPage() {
             <div>
               <label className="block text-xs font-semibold uppercase tracking-wider mb-3"
                      style={{ color: 'var(--fg-muted)' }}>
-                Teléfono
+                Correo electrónico
               </label>
               <div className="neo-inset rounded-2xl flex items-center gap-3 px-4 py-3.5">
-                <Phone size={17} style={{ color: 'var(--fg-muted)' }} className="flex-shrink-0" />
+                <Mail size={17} style={{ color: 'var(--fg-muted)' }} className="flex-shrink-0" />
                 <input
-                  type="tel"
-                  value={phone}
-                  onChange={e => setPhone(e.target.value.replace(/\D/g, ''))}
-                  placeholder="987 654 321"
+                  type="email"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  placeholder="correo@ejemplo.com"
                   className="flex-1 bg-transparent border-none outline-none text-base font-medium
                              placeholder:font-normal"
                   style={{
                     color: 'var(--fg)',
                     caretColor: 'var(--accent)',
                   }}
-                  inputMode="tel"
-                  autoComplete="tel"
+                  inputMode="email"
+                  autoComplete="email"
                   required
                 />
               </div>
@@ -160,7 +160,7 @@ export default function LoginPage() {
 
             <button
               type="submit"
-              disabled={loading || !phone.trim()}
+              disabled={loading || !email.trim()}
               className="w-full neo-btn-accent rounded-2xl py-4 flex items-center justify-center
                          gap-2 text-white font-bold text-sm disabled:opacity-40
                          disabled:cursor-not-allowed">

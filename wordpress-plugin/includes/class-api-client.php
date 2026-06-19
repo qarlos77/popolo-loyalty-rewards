@@ -12,12 +12,7 @@ class Popolo_API_Client {
     }
 
     /**
-     * Sync a WooCommerce order to Odoo.
-     *
-     * @param array $payload {
-     *   order_id, phone, order_total, currency, source, trigger_status
-     * }
-     * @return array { success, http_code, body }
+     * Sync a WooCommerce order to Odoo (matched by customer_email).
      */
     public function sync_order(array $payload): array {
         $url = $this->base_url . '/api/loyalty/sync-order';
@@ -51,10 +46,10 @@ class Popolo_API_Client {
     }
 
     /**
-     * Fetch loyalty points for a phone number (checkout display).
+     * Fetch loyalty points for an email address (checkout display).
      */
-    public function get_points_by_phone(string $phone): array {
-        $url = $this->base_url . '/api/loyalty/points-by-phone?' . http_build_query(['phone' => $phone]);
+    public function get_points_by_email(string $email): array {
+        $url = $this->base_url . '/api/loyalty/points-by-email?' . http_build_query(['email' => $email]);
 
         $response = wp_remote_get($url, [
             'timeout' => 8,
@@ -93,16 +88,11 @@ class Popolo_API_Client {
         $code = wp_remote_retrieve_response_code($response);
         $body = json_decode(wp_remote_retrieve_body($response), true);
 
-        return [
-            'ok'     => $code === 200,
-            'status' => $code,
-            'detail' => $body,
-        ];
+        return ['ok' => $code === 200, 'status' => $code, 'detail' => $body];
     }
 
     /**
-     * Test sync key: sends a dry-run with a fake order id that won't match any partner.
-     * Returns 404 (no_partner) on success, 401 if key is wrong.
+     * Verify API key: dry-run against sync-order endpoint.
      */
     public function test_api_key(): array {
         $url = $this->base_url . '/api/loyalty/sync-order';
@@ -114,10 +104,10 @@ class Popolo_API_Client {
                 'X-API-Key'    => $this->api_key,
             ],
             'body' => wp_json_encode([
-                'order_id'    => 'DRY_RUN_TEST',
-                'phone'       => '000000000',
-                'order_total' => 0,
-                'source'      => 'woocommerce_test',
+                'order_id'       => 'DRY_RUN_TEST',
+                'customer_email' => 'dryrun@test.invalid',
+                'order_total'    => 0,
+                'source'         => 'woocommerce_test',
             ]),
         ]);
 
@@ -125,10 +115,8 @@ class Popolo_API_Client {
             return ['ok' => false, 'error' => $response->get_error_message()];
         }
 
-        $code = wp_remote_retrieve_response_code($response);
-        $body = json_decode(wp_remote_retrieve_body($response), true);
-
-        // 401 = bad key; 404/200/400 = key accepted, endpoint reached
+        $code   = wp_remote_retrieve_response_code($response);
+        $body   = json_decode(wp_remote_retrieve_body($response), true);
         $key_ok = $code !== 401 && $code !== 503;
 
         return [

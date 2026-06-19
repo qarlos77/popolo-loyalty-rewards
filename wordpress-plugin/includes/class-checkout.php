@@ -13,10 +13,10 @@ class Popolo_Checkout {
     }
 
     private function __construct() {
-        add_action('wp_enqueue_scripts',                         [$this, 'enqueue_scripts']);
-        add_action('woocommerce_after_checkout_billing_form',    [$this, 'render_points_widget']);
-        add_action('wp_ajax_popolo_get_points',                  [$this, 'ajax_get_points']);
-        add_action('wp_ajax_nopriv_popolo_get_points',           [$this, 'ajax_get_points']);
+        add_action('wp_enqueue_scripts',                      [$this, 'enqueue_scripts']);
+        add_action('woocommerce_after_checkout_billing_form', [$this, 'render_points_widget']);
+        add_action('wp_ajax_popolo_get_points',               [$this, 'ajax_get_points']);
+        add_action('wp_ajax_nopriv_popolo_get_points',        [$this, 'ajax_get_points']);
     }
 
     public function enqueue_scripts(): void {
@@ -33,9 +33,8 @@ class Popolo_Checkout {
         );
 
         wp_localize_script('popolo-checkout', 'popoloLoyalty', [
-            'ajaxurl'     => admin_url('admin-ajax.php'),
-            'nonce'       => wp_create_nonce('popolo_get_points'),
-            'phone_field' => get_option('popolo_loyalty_phone_field', 'billing_phone'),
+            'ajaxurl' => admin_url('admin-ajax.php'),
+            'nonce'   => wp_create_nonce('popolo_get_points'),
         ]);
     }
 
@@ -46,8 +45,8 @@ class Popolo_Checkout {
     public function ajax_get_points(): void {
         check_ajax_referer('popolo_get_points');
 
-        $phone = sanitize_text_field($_POST['phone'] ?? '');
-        if (strlen(preg_replace('/\D/', '', $phone)) < 7) {
+        $email = sanitize_email($_POST['email'] ?? '');
+        if (!is_email($email)) {
             wp_send_json(['found' => false]);
         }
 
@@ -59,6 +58,6 @@ class Popolo_Checkout {
         }
 
         $client = new Popolo_API_Client($odoo_url, $api_key);
-        wp_send_json($client->get_points_by_phone($phone));
+        wp_send_json($client->get_points_by_email($email));
     }
 }
