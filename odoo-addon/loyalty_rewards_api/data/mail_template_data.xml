@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="mail_template_reward_redeemed" model="mail.template">
+        <field name="name">Loyalty: Reward Redeemed</field>
+        <field name="model_id" ref="model_loyalty_transaction"/>
+        <field name="subject">🎉 Tu recompensa está lista — PopoloPizza</field>
+        <field name="email_from">{{ (object.partner_id.company_id.email or user.email) }}</field>
+        <field name="body_html"><![CDATA[
+<div style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto;background:#1a1a2e;color:#fff;border-radius:16px;overflow:hidden">
+  <div style="background:linear-gradient(135deg,#e31e24,#ff6b35);padding:32px;text-align:center">
+    <h1 style="margin:0;font-size:28px">🍕 PopoloPizza</h1>
+    <p style="margin:8px 0 0;opacity:.9">Loyalty Rewards</p>
+  </div>
+  <div style="padding:32px">
+    <h2 style="color:#ff6b35">¡Recompensa canjeada!</h2>
+    <p>Hola <strong>{{ object.partner_id.name }}</strong>,</p>
+    <p>Has canjeado: <strong>{{ ctx.get('reward_name') }}</strong></p>
+    <div style="background:#16213e;border-radius:12px;padding:20px;text-align:center;margin:24px 0">
+      <p style="margin:0 0 8px;color:#aaa;font-size:14px">Código de confirmación</p>
+      <h1 style="margin:0;font-size:40px;letter-spacing:8px;color:#ff6b35">{{ ctx.get('confirmation_code') }}</h1>
+      <p style="margin:8px 0 0;font-size:12px;color:#aaa">Muestra este código al cajero · válido 10 min</p>
+    </div>
+    <p style="color:#aaa;font-size:13px;text-align:center">¡Gracias por ser parte del programa de lealtad!</p>
+  </div>
+</div>
+        ]]></field>
+        <field name="auto_delete" eval="True"/>
+    </record>
+
+    <record id="mail_template_welcome" model="mail.template">
+        <field name="name">Loyalty: Welcome</field>
+        <field name="model_id" ref="base.model_res_partner"/>
+        <field name="subject">🎉 Bienvenido a PopoloPizza Rewards</field>
+        <field name="body_html"><![CDATA[
+<div style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto;background:#1a1a2e;color:#fff;border-radius:16px;overflow:hidden">
+  <div style="background:linear-gradient(135deg,#e31e24,#ff6b35);padding:32px;text-align:center">
+    <h1 style="margin:0;font-size:28px">🍕 PopoloPizza Rewards</h1>
+  </div>
+  <div style="padding:32px">
+    <h2>¡Hola, {{ object.name }}!</h2>
+    <p>Ya eres parte de nuestro programa de lealtad. Acumula puntos con cada compra y canjéalos por increíbles recompensas.</p>
+    <a href="{{ ctx.get('app_url','https://rewards.popolopizza.com') }}"
+       style="display:block;background:linear-gradient(135deg,#e31e24,#ff6b35);color:#fff;text-decoration:none;padding:16px;border-radius:12px;text-align:center;font-size:18px;margin-top:24px">
+      Ver mis puntos →
+    </a>
+  </div>
+</div>
+        ]]></field>
+        <field name="auto_delete" eval="True"/>
+    </record>
+</odoo>

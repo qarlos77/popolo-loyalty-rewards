@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="res_config_settings_view_loyalty_api" model="ir.ui.view">
+        <field name="name">res.config.settings.loyalty.api</field>
+        <field name="model">res.config.settings</field>
+        <field name="inherit_id" ref="base_setup.action_general_configuration"/>
+        <field name="arch" type="xml">
+            <xpath expr="//div[hasclass('settings')]" position="before">
+                <div class="app_settings_block" data-string="Loyalty Rewards API" string="Loyalty Rewards API"
+                     data-key="loyalty_rewards_api" id="loyalty_rewards_api_settings">
+                    <h2>Loyalty Rewards Web App</h2>
+                    <div class="row mt16 o_settings_container">
+                        <div class="col-12 col-lg-6 o_setting_box">
+                            <div class="o_setting_left_pane"/>
+                            <div class="o_setting_right_pane">
+                                <span class="o_form_label">App URL</span>
+                                <div class="text-muted">Public URL of the rewards web app</div>
+                                <div class="content-group mt8">
+                                    <field name="loyalty_app_url" placeholder="https://rewards.popolopizza.com"/>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <h3>WhatsApp (Meta Cloud API)</h3>
+                    <div class="row mt16 o_settings_container">
+                        <div class="col-12 col-lg-6 o_setting_box">
+                            <div class="o_setting_left_pane"/>
+                            <div class="o_setting_right_pane">
+                                <span class="o_form_label">Phone Number ID</span>
+                                <div class="content-group mt8">
+                                    <field name="loyalty_wa_phone_id" placeholder="1234567890"/>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-12 col-lg-6 o_setting_box">
+                            <div class="o_setting_left_pane"/>
+                            <div class="o_setting_right_pane">
+                                <span class="o_form_label">Permanent Token</span>
+                                <div class="content-group mt8">
+                                    <field name="loyalty_wa_token" password="True"/>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-12 col-lg-6 o_setting_box">
+                            <div class="o_setting_left_pane"/>
+                            <div class="o_setting_right_pane">
+                                <span class="o_form_label">Template: Reward Redeemed</span>
+                                <div class="content-group mt8">
+                                    <field name="loyalty_wa_template_redeemed"/>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-12 col-lg-6 o_setting_box">
+                            <div class="o_setting_left_pane"/>
+                            <div class="o_setting_right_pane">
+                                <span class="o_form_label">Template: Points Earned</span>
+                                <div class="content-group mt8">
+                                    <field name="loyalty_wa_template_earned"/>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </xpath>
+        </field>
+    </record>
+</odoo>

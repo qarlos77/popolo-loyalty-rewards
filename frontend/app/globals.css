@@ -1,0 +1,32 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+* { -webkit-tap-highlight-color: transparent; }
+
+body {
+  background: #1a1a2e;
+  color: white;
+  font-family: 'Inter', system-ui, sans-serif;
+  overscroll-behavior: none;
+}
+
+/* Remove scrollbar on mobile */
+::-webkit-scrollbar { display: none; }
+* { scrollbar-width: none; }
+
+.card-shine {
+  background: linear-gradient(
+    135deg,
+    rgba(255,255,255,0.05) 0%,
+    rgba(255,255,255,0.0) 50%,
+    rgba(255,255,255,0.03) 100%
+  );
+}
+
+.points-glow {
+  text-shadow: 0 0 40px rgba(255, 107, 53, 0.6),
+               0 0 80px rgba(255, 107, 53, 0.3);
+}
