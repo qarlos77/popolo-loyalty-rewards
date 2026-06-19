@@ -481,7 +481,7 @@ class LoyaltyAPI(http.Controller):
 
         request.env['loyalty.history'].sudo().create({
             'card_id':     card.id,
-            'description': f'WooCommerce #{order_id}',
+            'description': f'Compra por la web #{order_id}',
             'issued':      points,
             'used':        0,
         })
