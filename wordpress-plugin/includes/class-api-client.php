@@ -51,6 +51,31 @@ class Popolo_API_Client {
     }
 
     /**
+     * Fetch loyalty points for a phone number (checkout display).
+     */
+    public function get_points_by_phone(string $phone): array {
+        $url = $this->base_url . '/api/loyalty/points-by-phone?' . http_build_query(['phone' => $phone]);
+
+        $response = wp_remote_get($url, [
+            'timeout' => 8,
+            'headers' => ['X-API-Key' => $this->api_key],
+        ]);
+
+        if (is_wp_error($response)) {
+            return ['found' => false, 'error' => $response->get_error_message()];
+        }
+
+        $code = wp_remote_retrieve_response_code($response);
+        $body = json_decode(wp_remote_retrieve_body($response), true);
+
+        if ($code !== 200) {
+            return ['found' => false, 'error' => $body['error'] ?? "HTTP {$code}"];
+        }
+
+        return $body;
+    }
+
+    /**
      * Test connectivity: calls Odoo /web/health.
      */
     public function test_connection(): array {

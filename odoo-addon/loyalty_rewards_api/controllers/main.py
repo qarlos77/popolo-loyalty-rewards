@@ -350,6 +350,48 @@ class LoyaltyAPI(http.Controller):
             'total_points': sum(c.points for c in cards),
         })
 
+    # ── Points lookup by phone (checkout) ───────────────────────────────────
+    @http.route('/api/loyalty/points-by-phone', type='http', auth='none',
+                methods=['GET', 'POST'], csrf=False)
+    def points_by_phone(self, **kw):
+        icp        = request.env['ir.config_parameter'].sudo()
+        stored_key = icp.get_param('loyalty_rewards_api.sync_api_key', '')
+        sent_key   = request.httprequest.headers.get('X-API-Key', '')
+        if not stored_key or sent_key != stored_key:
+            return _json_response({'error': 'Unauthorized'}, 401)
+
+        phone_raw = (request.httprequest.args.get('phone') or '').strip()
+        if not phone_raw:
+            try:
+                phone_raw = json.loads(request.httprequest.data or '{}').get('phone', '').strip()
+            except Exception:
+                pass
+
+        if not phone_raw:
+            return _json_response({'error': 'phone required'}, 400)
+
+        phone_clean = _normalize_phone(phone_raw)
+        Partner     = request.env['res.partner'].sudo()
+        partner     = (
+            Partner.search([('phone', '=', phone_clean), ('active', '=', True)], limit=1)
+            or Partner.search([('phone', '=', phone_raw), ('active', '=', True)], limit=1)
+            or (Partner.search([('phone', 'like', phone_clean[-9:]), ('active', '=', True)], limit=1)
+                if len(phone_clean) >= 9 else None)
+        )
+
+        if not partner:
+            return _json_response({'found': False, 'total_points': 0})
+
+        cards        = request.env['loyalty.card'].sudo().search([('partner_id', '=', partner.id)])
+        total_points = int(sum(c.points for c in cards))
+
+        return _json_response({
+            'found':                True,
+            'partner_name':         partner.name,
+            'total_points':         total_points,
+            'total_points_display': f'{total_points:,}',
+        })
+
     # ── WooCommerce sync-order ───────────────────────────────────────────────
     @http.route('/api/loyalty/sync-order', type='http', auth='none',
                 methods=['POST'], csrf=False)

@@ -21,6 +21,7 @@ define('POPOLO_LOYALTY_TABLE',      $GLOBALS['wpdb']->prefix . 'popolo_loyalty_l
 /* ── Autoload classes ─────────────────────────────────────────────────────── */
 require_once POPOLO_LOYALTY_PLUGIN_DIR . 'includes/class-api-client.php';
 require_once POPOLO_LOYALTY_PLUGIN_DIR . 'includes/class-order-sync.php';
+require_once POPOLO_LOYALTY_PLUGIN_DIR . 'includes/class-checkout.php';
 require_once POPOLO_LOYALTY_PLUGIN_DIR . 'admin/class-admin.php';
 
 /* ── Activation: create log table ────────────────────────────────────────── */
@@ -75,6 +76,7 @@ function popolo_loyalty_init() {
     }
 
     Popolo_Order_Sync::get_instance();
+    Popolo_Checkout::get_instance();
 
     if (is_admin()) {
         Popolo_Admin::get_instance();
