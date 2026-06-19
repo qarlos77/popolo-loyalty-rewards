@@ -97,9 +97,32 @@ class Popolo_Registration {
                             </div>
 
                             <div class="popolo-field popolo-field-full">
-                                <label for="loyalty_birth_date">Fecha de nacimiento <span class="required">*</span></label>
-                                <input type="date" id="loyalty_birth_date" name="loyalty_birth_date"
-                                       max="<?= esc_attr(date('Y-m-d')) ?>" required>
+                                <label>Fecha de nacimiento <span class="required">*</span></label>
+                                <div class="popolo-date-selects">
+                                    <select id="loyalty_birth_day" class="popolo-date-part" aria-label="Día">
+                                        <option value="">Día</option>
+                                        <?php for ($d = 1; $d <= 31; $d++): ?>
+                                        <option value="<?= $d ?>"><?= str_pad($d, 2, '0', STR_PAD_LEFT) ?></option>
+                                        <?php endfor; ?>
+                                    </select>
+                                    <select id="loyalty_birth_month" class="popolo-date-part" aria-label="Mes">
+                                        <option value="">Mes</option>
+                                        <?php
+                                        $months = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
+                                                   'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+                                        foreach ($months as $i => $m):
+                                        ?>
+                                        <option value="<?= $i + 1 ?>"><?= $m ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                    <select id="loyalty_birth_year" class="popolo-date-part" aria-label="Año">
+                                        <option value="">Año</option>
+                                        <?php for ($y = (int) date('Y') - 10; $y >= 1930; $y--): ?>
+                                        <option value="<?= $y ?>"><?= $y ?></option>
+                                        <?php endfor; ?>
+                                    </select>
+                                </div>
+                                <input type="hidden" id="loyalty_birth_date" name="loyalty_birth_date">
                                 <span class="field-hint">Para recibir tu regalo de cumpleanos en el local</span>
                             </div>
 

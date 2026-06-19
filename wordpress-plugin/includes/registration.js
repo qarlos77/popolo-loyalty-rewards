@@ -13,7 +13,21 @@
         $('html, body').animate({ scrollTop: $('#popolo-register-message').offset().top - 80 }, 300);
     }
 
+    function buildBirthDate() {
+        var d = $('#loyalty_birth_day').val();
+        var m = $('#loyalty_birth_month').val();
+        var y = $('#loyalty_birth_year').val();
+        if (!d || !m || !y) { return ''; }
+        var val = y + '-' + String(m).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+        $('#loyalty_birth_date').val(val);
+        return val;
+    }
+
     $(function () {
+        $('#loyalty_birth_day, #loyalty_birth_month, #loyalty_birth_year').on('change', function () {
+            buildBirthDate();
+        });
+
         $('#popolo-register-form').on('submit', function (e) {
             e.preventDefault();
 
@@ -21,7 +35,7 @@
             var lastname   = $('#loyalty_lastname').val().trim();
             var email      = $('#loyalty_email').val().trim();
             var phone      = $('#loyalty_phone').val().trim();
-            var birth_date = $('#loyalty_birth_date').val().trim();
+            var birth_date = buildBirthDate();
 
             if (!name || !email || !phone || !birth_date) {
                 showMessage('Por favor completa los campos obligatorios (Nombre, Correo, Teléfono y Fecha de nacimiento).', 'error');

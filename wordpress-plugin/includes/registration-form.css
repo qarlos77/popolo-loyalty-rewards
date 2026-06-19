@@ -148,6 +148,39 @@
     display: block;
 }
 
+/* Date selects */
+.popolo-date-selects {
+    display: grid;
+    grid-template-columns: 1fr 2fr 1.4fr;
+    gap: 8px;
+}
+
+.popolo-date-part {
+    width: 100%;
+    padding: 11px 10px;
+    border: 1.5px solid #e5e7eb;
+    border-radius: 10px;
+    font-size: 15px;
+    color: #111827;
+    background: #f9fafb;
+    box-sizing: border-box;
+    cursor: pointer;
+    transition: border-color .18s, box-shadow .18s, background .18s;
+    -webkit-appearance: none;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%239ca3af' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    padding-right: 28px;
+}
+
+.popolo-date-part:focus {
+    outline: none;
+    border-color: #e53935;
+    background-color: #fff;
+    box-shadow: 0 0 0 3px rgba(229, 57, 53, .12);
+}
+
 /* Divider */
 .popolo-register-divider {
     border: none;
