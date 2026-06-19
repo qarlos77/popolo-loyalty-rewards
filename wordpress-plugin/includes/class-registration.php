@@ -28,6 +28,13 @@ class Popolo_Registration {
             return;
         }
 
+        wp_enqueue_style(
+            'popolo-registration-form',
+            POPOLO_LOYALTY_PLUGIN_URL . 'includes/registration-form.css',
+            [],
+            POPOLO_LOYALTY_VERSION
+        );
+
         wp_enqueue_script(
             'popolo-registration',
             POPOLO_LOYALTY_PLUGIN_URL . 'includes/registration.js',
@@ -46,45 +53,71 @@ class Popolo_Registration {
         $welcome_pts = (int) get_option('popolo_loyalty_welcome_points', 10);
         ob_start();
         ?>
-        <div id="popolo-register-wrap" class="popolo-register-wrap woocommerce">
+        <div id="popolo-register-wrap" class="popolo-register-wrap">
+            <div class="popolo-register-card">
 
-            <?php if ($welcome_pts > 0): ?>
-            <p class="popolo-register-intro woocommerce-info">
-                Regístrate y recibe <strong><?= $welcome_pts ?> puntos de bienvenida</strong> para empezar a canjear beneficios.
-            </p>
-            <?php endif; ?>
+                <div class="popolo-register-header">
+                    <h2>Programa de Lealtad</h2>
+                    <p>Gana puntos con cada compra y canjéalos por premios exclusivos</p>
+                    <?php if ($welcome_pts > 0): ?>
+                    <span class="popolo-welcome-badge">
+                        <?= $welcome_pts ?> puntos de bienvenida gratis
+                    </span>
+                    <?php endif; ?>
+                </div>
 
-            <div id="popolo-register-message" style="display:none;"></div>
+                <div class="popolo-register-body">
+                    <div id="popolo-register-message" class="popolo-register-msg"></div>
 
-            <form id="popolo-register-form" novalidate>
-                <p class="form-row form-row-first">
-                    <label for="loyalty_name">Nombre <span class="required">*</span></label>
-                    <input type="text" id="loyalty_name" name="loyalty_name" class="input-text" required>
-                </p>
-                <p class="form-row form-row-last">
-                    <label for="loyalty_lastname">Apellido</label>
-                    <input type="text" id="loyalty_lastname" name="loyalty_lastname" class="input-text">
-                </p>
-                <p class="form-row form-row-wide">
-                    <label for="loyalty_email">Correo electrónico <span class="required">*</span></label>
-                    <input type="email" id="loyalty_email" name="loyalty_email" class="input-text" required>
-                </p>
-                <p class="form-row form-row-wide">
-                    <label for="loyalty_phone">Teléfono <span class="required">*</span></label>
-                    <input type="tel" id="loyalty_phone" name="loyalty_phone" class="input-text" required>
-                </p>
-                <p class="form-row form-row-wide">
-                    <label for="loyalty_birth_date">Fecha de nacimiento <span class="required">*</span></label>
-                    <input type="date" id="loyalty_birth_date" name="loyalty_birth_date" class="input-text"
-                           max="<?= esc_attr(date('Y-m-d')) ?>" required>
-                    <span class="description" style="font-size:12px;color:#777;">Para recibir tu beneficio de cumpleaños en el local.</span>
-                </p>
-                <p class="form-row">
-                    <button type="submit" id="popolo-register-submit" class="button alt">
-                        Registrarme
-                    </button>
-                </p>
-            </form>
+                    <form id="popolo-register-form" novalidate>
+                        <div class="popolo-register-grid">
+
+                            <div class="popolo-field">
+                                <label for="loyalty_name">Nombre <span class="required">*</span></label>
+                                <input type="text" id="loyalty_name" name="loyalty_name"
+                                       placeholder="Tu nombre" required>
+                            </div>
+
+                            <div class="popolo-field">
+                                <label for="loyalty_lastname">Apellido</label>
+                                <input type="text" id="loyalty_lastname" name="loyalty_lastname"
+                                       placeholder="Tu apellido">
+                            </div>
+
+                            <div class="popolo-field popolo-field-full">
+                                <label for="loyalty_email">Correo electrónico <span class="required">*</span></label>
+                                <input type="email" id="loyalty_email" name="loyalty_email"
+                                       placeholder="correo@ejemplo.com" required>
+                            </div>
+
+                            <div class="popolo-field popolo-field-full">
+                                <label for="loyalty_phone">Teléfono <span class="required">*</span></label>
+                                <input type="tel" id="loyalty_phone" name="loyalty_phone"
+                                       placeholder="999 999 999" required>
+                            </div>
+
+                            <div class="popolo-field popolo-field-full">
+                                <label for="loyalty_birth_date">Fecha de nacimiento <span class="required">*</span></label>
+                                <input type="date" id="loyalty_birth_date" name="loyalty_birth_date"
+                                       max="<?= esc_attr(date('Y-m-d')) ?>" required>
+                                <span class="field-hint">Para recibir tu regalo de cumpleanos en el local</span>
+                            </div>
+
+                        </div>
+
+                        <hr class="popolo-register-divider">
+
+                        <button type="submit" id="popolo-register-submit" class="popolo-register-btn">
+                            Registrarme
+                        </button>
+
+                        <p class="popolo-register-privacy">
+                            Tu informacion esta protegida y no sera compartida con terceros.
+                        </p>
+                    </form>
+                </div>
+
+            </div>
         </div>
         <?php
         return ob_get_clean();

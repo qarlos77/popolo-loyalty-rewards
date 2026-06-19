@@ -2,12 +2,12 @@
     'use strict';
 
     function showMessage(msg, type) {
-        var cssClass = type === 'success' ? 'woocommerce-message'
-                     : type === 'info'    ? 'woocommerce-info'
-                     :                      'woocommerce-error';
+        var cssClass = type === 'success' ? 'success'
+                     : type === 'info'    ? 'info'
+                     :                      'error';
         $('#popolo-register-message')
-            .removeClass('woocommerce-message woocommerce-info woocommerce-error')
-            .addClass(cssClass)
+            .removeClass('success info error')
+            .addClass('popolo-register-msg ' + cssClass)
             .html(msg)
             .show();
         $('html, body').animate({ scrollTop: $('#popolo-register-message').offset().top - 80 }, 300);

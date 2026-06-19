@@ -1,0 +1,213 @@
+/* ── Popolo Loyalty — Registration Form ──────────────────────────────────── */
+
+.popolo-register-wrap {
+    max-width: 560px;
+    margin: 40px auto;
+}
+
+/* Card */
+.popolo-register-card {
+    background: #fff;
+    border-radius: 16px;
+    box-shadow: 0 8px 40px rgba(0, 0, 0, .12);
+    overflow: hidden;
+}
+
+/* Header */
+.popolo-register-header {
+    background: linear-gradient(135deg, #b71c1c 0%, #e53935 100%);
+    color: #fff;
+    padding: 40px 40px 32px;
+    text-align: center;
+    position: relative;
+}
+
+.popolo-register-header::after {
+    content: '';
+    position: absolute;
+    bottom: -1px; left: 0; right: 0;
+    height: 24px;
+    background: #fff;
+    border-radius: 50% 50% 0 0 / 100% 100% 0 0;
+}
+
+.popolo-register-header h2 {
+    margin: 0 0 8px;
+    font-size: 26px;
+    font-weight: 800;
+    color: #fff;
+    letter-spacing: -.3px;
+}
+
+.popolo-register-header p {
+    margin: 0;
+    font-size: 15px;
+    color: rgba(255,255,255,.88);
+}
+
+.popolo-welcome-badge {
+    display: inline-block;
+    margin-top: 16px;
+    padding: 7px 20px;
+    background: rgba(255,255,255,.18);
+    border: 1.5px solid rgba(255,255,255,.45);
+    border-radius: 999px;
+    font-size: 14px;
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: .2px;
+}
+
+/* Body */
+.popolo-register-body {
+    padding: 32px 40px 36px;
+}
+
+/* Message box */
+.popolo-register-msg {
+    border-radius: 10px;
+    padding: 14px 18px;
+    margin-bottom: 22px;
+    font-size: 14px;
+    line-height: 1.5;
+    display: none;
+}
+
+.popolo-register-msg.success {
+    background: #ecfdf5;
+    color: #065f46;
+    border: 1px solid #6ee7b7;
+}
+
+.popolo-register-msg.error {
+    background: #fff1f2;
+    color: #9f1239;
+    border: 1px solid #fda4af;
+}
+
+.popolo-register-msg.info {
+    background: #eff6ff;
+    color: #1e40af;
+    border: 1px solid #93c5fd;
+}
+
+/* Grid */
+.popolo-register-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+}
+
+.popolo-field-full {
+    grid-column: 1 / -1;
+}
+
+/* Fields */
+.popolo-field label {
+    display: block;
+    font-size: 13px;
+    font-weight: 700;
+    color: #374151;
+    margin-bottom: 7px;
+    letter-spacing: .1px;
+}
+
+.popolo-field label .required {
+    color: #e53935;
+    margin-left: 2px;
+}
+
+.popolo-field input {
+    width: 100%;
+    padding: 11px 14px;
+    border: 1.5px solid #e5e7eb;
+    border-radius: 10px;
+    font-size: 15px;
+    color: #111827;
+    background: #f9fafb;
+    box-sizing: border-box;
+    transition: border-color .18s, box-shadow .18s, background .18s;
+    -webkit-appearance: none;
+}
+
+.popolo-field input::placeholder {
+    color: #9ca3af;
+}
+
+.popolo-field input:focus {
+    outline: none;
+    border-color: #e53935;
+    background: #fff;
+    box-shadow: 0 0 0 3px rgba(229, 57, 53, .12);
+}
+
+.popolo-field .field-hint {
+    font-size: 12px;
+    color: #9ca3af;
+    margin-top: 6px;
+    display: block;
+}
+
+/* Divider */
+.popolo-register-divider {
+    border: none;
+    border-top: 1px solid #f3f4f6;
+    margin: 24px 0 0;
+}
+
+/* Submit */
+.popolo-register-btn {
+    display: block;
+    width: 100%;
+    padding: 14px 20px;
+    margin-top: 24px;
+    background: linear-gradient(135deg, #b71c1c, #e53935);
+    color: #fff;
+    border: none;
+    border-radius: 10px;
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: .3px;
+    cursor: pointer;
+    transition: opacity .18s, transform .12s, box-shadow .18s;
+    box-shadow: 0 4px 14px rgba(229, 57, 53, .35);
+}
+
+.popolo-register-btn:hover:not(:disabled) {
+    opacity: .93;
+    box-shadow: 0 6px 18px rgba(229, 57, 53, .45);
+}
+
+.popolo-register-btn:active:not(:disabled) {
+    transform: scale(.99);
+}
+
+.popolo-register-btn:disabled {
+    opacity: .6;
+    cursor: not-allowed;
+    box-shadow: none;
+}
+
+/* Privacy note */
+.popolo-register-privacy {
+    text-align: center;
+    font-size: 12px;
+    color: #9ca3af;
+    margin-top: 16px;
+}
+
+/* Responsive */
+@media (max-width: 520px) {
+    .popolo-register-grid {
+        grid-template-columns: 1fr;
+    }
+    .popolo-register-header,
+    .popolo-register-body {
+        padding-left: 24px;
+        padding-right: 24px;
+    }
+    .popolo-register-header {
+        padding-top: 32px;
+        padding-bottom: 28px;
+    }
+}
