@@ -368,12 +368,13 @@ class LoyaltyAPI(http.Controller):
         except Exception:
             return _json_response({'error': 'Invalid JSON'}, 400)
 
-        order_id    = str(body.get('order_id', '')).strip()
-        phone_raw   = str(body.get('phone', '')).strip()
-        order_total = float(body.get('order_total', 0))
-        currency    = body.get('currency', 'PEN')
-        source      = body.get('source', 'woocommerce')
-        order_key   = body.get('order_key', '')
+        order_id       = str(body.get('order_id', '')).strip()
+        phone_raw      = str(body.get('phone', '')).strip()
+        order_total    = float(body.get('order_total', 0))
+        currency       = body.get('currency', 'PEN')
+        source         = body.get('source', 'woocommerce')
+        customer_name  = str(body.get('customer_name', '')).strip()
+        customer_email = str(body.get('customer_email', '')).strip()
 
         if not order_id or not phone_raw:
             return _json_response({'error': 'order_id and phone are required'}, 400)
@@ -413,21 +414,17 @@ class LoyaltyAPI(http.Controller):
             if len(phone_clean) >= 9 else Partner
         )
 
+        partner_created = False
         if not partner or not partner.id:
-            SyncLog.create({
-                'external_order_id': order_id,
-                'source':  source,
-                'phone':   phone_raw,
-                'order_total': order_total,
-                'currency':    currency,
-                'state':   'no_partner',
-                'message': f'No partner found for phone "{phone_raw}" (cleaned: "{phone_clean}")',
+            # Auto-create contact from WooCommerce data
+            name = customer_name or f'Cliente WC #{order_id}'
+            partner = request.env['res.partner'].sudo().create({
+                'name':          name,
+                'phone':         phone_clean or phone_raw,
+                'email':         customer_email or False,
+                'customer_rank': 1,
             })
-            return _json_response({
-                'error': 'Partner not found',
-                'phone': phone_raw,
-                'hint':  'Register this phone number in Odoo Contacts first.',
-            }, 404)
+            partner_created = True
 
         # --- Find or create loyalty card ---
         cards = request.env['loyalty.card'].sudo().search([('partner_id', '=', partner.id)])
@@ -489,6 +486,7 @@ class LoyaltyAPI(http.Controller):
             'used':        0,
         })
 
+        created_note = ' (contacto creado automáticamente)' if partner_created else ''
         SyncLog.create({
             'external_order_id': order_id,
             'source':  source,
@@ -498,19 +496,20 @@ class LoyaltyAPI(http.Controller):
             'currency':     currency,
             'points_awarded': points,
             'state':   'synced',
-            'message': f'OK — {points} pts awarded. New balance: {card.points}',
+            'message': f'OK — {points} pts awarded. New balance: {card.points}{created_note}',
         })
 
         # Notify partner via WhatsApp if configured
         self._notify_whatsapp_earned(partner, points, card.points)
 
         return _json_response({
-            'success':        True,
-            'partner_name':   partner.name,
-            'partner_phone':  partner.phone,
-            'points_awarded': points,
-            'total_points':   card.points,
-            'card_code':      card.code,
+            'success':         True,
+            'partner_name':    partner.name,
+            'partner_phone':   partner.phone,
+            'partner_created': partner_created,
+            'points_awarded':  points,
+            'total_points':    card.points,
+            'card_code':       card.code,
         })
 
     # ── WhatsApp helpers ─────────────────────────────────────────────────────

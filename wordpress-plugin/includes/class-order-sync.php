@@ -98,6 +98,7 @@ class Popolo_Order_Sync {
             'source'         => 'woocommerce',
             'trigger_status' => $trigger_status,
             'customer_name'  => trim($order->get_billing_first_name() . ' ' . $order->get_billing_last_name()),
+            'customer_email' => $order->get_billing_email(),
         ]);
 
         $body = $result['body'];
@@ -120,10 +121,13 @@ class Popolo_Order_Sync {
 
         // Add order note in WooCommerce for visibility
         if ($result['success']) {
+            $created_note = !empty($body['partner_created']) ? ' (contacto creado en Odoo)' : '';
             $order->add_order_note(sprintf(
-                __('Popolo Loyalty: %d puntos otorgados (total acumulado: %d pts).', 'popolo-loyalty-sync'),
+                __('Popolo Loyalty: %d puntos otorgados a %s (total: %d pts)%s.', 'popolo-loyalty-sync'),
                 $log_data['points_awarded'],
-                (int) ($body['total_points'] ?? 0)
+                $log_data['partner_name'],
+                (int) ($body['total_points'] ?? 0),
+                $created_note
             ));
         } elseif ($log_data['state'] === 'no_partner') {
             $order->add_order_note(sprintf(
