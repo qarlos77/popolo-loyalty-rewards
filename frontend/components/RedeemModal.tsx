@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
 import QRCode from 'qrcode'
-import { X, CheckCircle, Loader2, AlertCircle } from 'lucide-react'
+import { X, Check, Loader2, AlertCircle } from 'lucide-react'
 import { odoo } from '@/lib/odoo'
 import { getToken } from '@/lib/auth'
 import type { Reward } from '@/lib/types'
@@ -16,42 +16,36 @@ interface Props {
 type Stage = 'confirm' | 'loading' | 'success' | 'error'
 
 export default function RedeemModal({ reward, cardId, onClose, onSuccess }: Props) {
-  const [stage, setStage] = useState<Stage>('confirm')
+  const [stage,    setStage]    = useState<Stage>('confirm')
   const [errorMsg, setErrorMsg] = useState('')
-  const [txnData, setTxnData] = useState<{
+  const [txnData,  setTxnData]  = useState<{
     code: string; expires_at: string; qr_payload: string; points_remaining: number
   } | null>(null)
-  const qrRef = useRef<HTMLCanvasElement>(null)
-  const expiryRef = useRef<ReturnType<typeof setInterval>>()
+  const qrRef    = useRef<HTMLCanvasElement>(null)
+  const timerRef = useRef<ReturnType<typeof setInterval>>()
   const [secondsLeft, setSecondsLeft] = useState(600)
 
   useEffect(() => {
     if (stage === 'success' && txnData && qrRef.current) {
       QRCode.toCanvas(qrRef.current, txnData.qr_payload, {
-        width: 220, margin: 2,
-        color: { dark: '#1a1a2e', light: '#ffffff' },
+        width: 190, margin: 2,
+        color: { dark: '#1e2030', light: '#eaedf3' },
         errorCorrectionLevel: 'M',
       })
-
-      // Countdown
       const expiry = new Date(txnData.expires_at).getTime()
-      expiryRef.current = setInterval(() => {
+      timerRef.current = setInterval(() => {
         const left = Math.max(0, Math.floor((expiry - Date.now()) / 1000))
         setSecondsLeft(left)
-        if (left <= 0) {
-          clearInterval(expiryRef.current)
-          onClose()
-        }
+        if (left <= 0) { clearInterval(timerRef.current); onClose() }
       }, 1000)
     }
-    return () => clearInterval(expiryRef.current)
+    return () => clearInterval(timerRef.current)
   }, [stage, txnData, onClose])
 
   async function handleRedeem() {
     setStage('loading')
     try {
-      const token = getToken()!
-      const res = await odoo.redeem(token, cardId, reward.id)
+      const res = await odoo.redeem(getToken()!, cardId, reward.id)
       setTxnData({
         code: res.confirmation_code,
         expires_at: res.expires_at,
@@ -68,93 +62,121 @@ export default function RedeemModal({ reward, cardId, onClose, onSuccess }: Prop
 
   const mins = Math.floor(secondsLeft / 60)
   const secs = secondsLeft % 60
+  const timerPct = (secondsLeft / 600) * 100
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center"
+    <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center"
          onClick={e => e.target === e.currentTarget && onClose()}>
-      {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 backdrop-blur-sm"
+           style={{ background: 'rgba(0,0,0,0.5)' }}
+           onClick={onClose} />
 
-      {/* Sheet */}
-      <div className="relative w-full max-w-[430px] bg-brand-card rounded-t-3xl p-6
-                      animate-bounce-in border-t border-white/10">
+      <div className="relative w-full md:max-w-sm animate-bounce-in
+                      rounded-t-3xl md:rounded-3xl p-6 mx-0 md:mx-4"
+           style={{ background: 'var(--bg)' }}>
+
         <button onClick={onClose}
-          className="absolute top-4 right-4 text-gray-400 active:text-white">
-          <X size={24} />
+          className="absolute top-4 right-4 w-8 h-8 rounded-xl neo-sm
+                     flex items-center justify-center"
+          style={{ color: 'var(--fg-muted)' }}>
+          <X size={16} />
         </button>
 
+        {/* ── Confirm ── */}
         {stage === 'confirm' && (
-          <div className="space-y-6">
-            <div className="text-center">
-              <div className="w-16 h-16 rounded-full bg-brand-orange/20 flex items-center
-                              justify-center mx-auto mb-4">
-                <span className="text-3xl">🎁</span>
-              </div>
-              <h2 className="text-white font-bold text-xl">{reward.name}</h2>
-              <p className="text-brand-orange font-semibold mt-1">
+          <div className="space-y-5 pt-1">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider"
+                 style={{ color: 'var(--fg-muted)' }}>
+                Confirmar canje
+              </p>
+              <h2 className="text-lg font-bold mt-1 tracking-tight" style={{ color: 'var(--fg)' }}>
+                {reward.name}
+              </h2>
+              <p className="text-sm font-semibold mt-0.5" style={{ color: 'var(--accent)' }}>
                 {reward.required_points.toLocaleString()} puntos
               </p>
             </div>
-            <div className="bg-brand-dark rounded-2xl p-4 text-sm text-gray-400">
-              Al canjear, se generará un <strong className="text-white">código QR</strong>{' '}
-              que el cajero debe escanear en los próximos <strong className="text-white">10 minutos</strong>.
+
+            <div className="neo-inset rounded-2xl px-4 py-3 text-sm"
+                 style={{ color: 'var(--fg-muted)' }}>
+              Se generará un código QR válido por{' '}
+              <span className="font-semibold" style={{ color: 'var(--fg)' }}>10 minutos</span>.
+              Muéstraselo al cajero para completar el canje.
             </div>
+
             <button onClick={handleRedeem}
-              className="w-full bg-gradient-to-r from-brand-red to-brand-orange
-                         text-white font-bold py-4 rounded-2xl active:scale-95 transition-all">
-              Canjear ahora
+              className="w-full neo-btn-accent rounded-2xl py-4 text-white font-bold text-sm">
+              Confirmar canje
             </button>
           </div>
         )}
 
+        {/* ── Loading ── */}
         {stage === 'loading' && (
-          <div className="flex flex-col items-center py-8 gap-4">
-            <Loader2 size={40} className="animate-spin text-brand-orange" />
-            <p className="text-gray-400">Procesando canje...</p>
+          <div className="flex flex-col items-center py-10 gap-4">
+            <Loader2 size={32} className="animate-spin" style={{ color: 'var(--accent)' }} />
+            <p className="text-sm" style={{ color: 'var(--fg-muted)' }}>Procesando...</p>
           </div>
         )}
 
+        {/* ── Success ── */}
         {stage === 'success' && txnData && (
-          <div className="space-y-4">
+          <div className="space-y-4 pt-1">
             <div className="flex items-center gap-3">
-              <CheckCircle size={28} className="text-green-400 flex-shrink-0" />
+              <div className="w-9 h-9 rounded-xl neo-inset-sm flex items-center justify-center flex-shrink-0">
+                <Check size={16} style={{ color: '#4ade80' }} />
+              </div>
               <div>
-                <p className="text-white font-bold">¡Canje exitoso!</p>
-                <p className="text-gray-400 text-sm">{reward.name}</p>
+                <p className="text-sm font-bold" style={{ color: 'var(--fg)' }}>Canje exitoso</p>
+                <p className="text-xs" style={{ color: 'var(--fg-muted)' }}>{reward.name}</p>
               </div>
             </div>
 
-            {/* QR to show cashier */}
-            <div className="bg-white rounded-2xl p-4 flex flex-col items-center">
-              <canvas ref={qrRef} className="rounded-xl" />
-              <p className="text-brand-dark font-bold text-2xl tracking-[0.3em] mt-3">
+            {/* QR */}
+            <div className="neo-inset rounded-2xl p-4 flex flex-col items-center">
+              <canvas ref={qrRef} className="block rounded-xl" />
+              <p className="font-mono font-black text-2xl tracking-[0.25em] mt-3"
+                 style={{ color: 'var(--fg)' }}>
                 {txnData.code}
               </p>
-              <p className="text-gray-500 text-xs mt-1">Muestra al cajero</p>
+              <p className="text-xs mt-1" style={{ color: 'var(--fg-muted)' }}>
+                Muestra al cajero
+              </p>
             </div>
 
             {/* Timer */}
-            <div className="bg-brand-dark rounded-2xl px-4 py-3 flex items-center justify-between">
-              <p className="text-gray-400 text-sm">Expira en</p>
-              <p className={`font-mono font-bold text-lg ${secondsLeft < 60 ? 'text-red-400' : 'text-brand-orange'}`}>
-                {mins}:{secs.toString().padStart(2, '0')}
-              </p>
+            <div className="neo-sm rounded-2xl p-3 space-y-2">
+              <div className="flex justify-between items-baseline">
+                <p className="text-xs" style={{ color: 'var(--fg-muted)' }}>Expira en</p>
+                <p className="font-mono font-bold text-base"
+                   style={{ color: secondsLeft < 60 ? 'var(--accent)' : 'var(--fg)' }}>
+                  {mins}:{secs.toString().padStart(2, '0')}
+                </p>
+              </div>
+              <div className="h-1.5 rounded-full neo-inset-sm overflow-hidden">
+                <div className="progress-fill h-full transition-none"
+                     style={{ width: `${timerPct}%` }} />
+              </div>
             </div>
           </div>
         )}
 
+        {/* ── Error ── */}
         {stage === 'error' && (
-          <div className="space-y-4">
+          <div className="space-y-4 pt-1">
             <div className="flex items-center gap-3">
-              <AlertCircle size={28} className="text-red-400 flex-shrink-0" />
+              <div className="w-9 h-9 rounded-xl neo-inset-sm flex items-center justify-center flex-shrink-0">
+                <AlertCircle size={16} style={{ color: 'var(--accent)' }} />
+              </div>
               <div>
-                <p className="text-white font-bold">Error al canjear</p>
-                <p className="text-red-400 text-sm">{errorMsg}</p>
+                <p className="text-sm font-bold" style={{ color: 'var(--fg)' }}>Error al canjear</p>
+                <p className="text-xs mt-0.5" style={{ color: 'var(--accent)' }}>{errorMsg}</p>
               </div>
             </div>
             <button onClick={onClose}
-              className="w-full bg-brand-dark border border-white/20 text-white
-                         font-semibold py-3 rounded-2xl">
+              className="w-full neo-btn rounded-2xl py-3.5 text-sm font-semibold"
+              style={{ color: 'var(--fg)' }}>
               Cerrar
             </button>
           </div>

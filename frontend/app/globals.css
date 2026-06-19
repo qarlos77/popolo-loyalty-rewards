@@ -4,29 +4,104 @@
 
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
 
-* { -webkit-tap-highlight-color: transparent; }
+/* ── Design tokens ──────────────────────────────────────────────── */
+:root {
+  --bg:           #eaedf3;
+  --bg-deep:      #e2e5ec;
+  --fg:           #1e2030;
+  --fg-muted:     #7e8698;
+  --fg-subtle:    #b0b7c8;
+  --accent:       #ff4a4a;
+  --accent-dim:   rgba(255, 74, 74, 0.12);
+  --sh-dark:      #c4c8d3;
+  --sh-light:     #ffffff;
+  --border:       rgba(0,0,0,0.06);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg:           #1a1c24;
+    --bg-deep:      #13151c;
+    --fg:           #e2e6f3;
+    --fg-muted:     #6e7898;
+    --fg-subtle:    #404868;
+    --accent:       #ff4a4a;
+    --accent-dim:   rgba(255, 74, 74, 0.14);
+    --sh-dark:      #0f1017;
+    --sh-light:     #242838;
+    --border:       rgba(255,255,255,0.04);
+  }
+}
+
+/* ── Base ───────────────────────────────────────────────────────── */
+* { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
 
 body {
-  background: #1a1a2e;
-  color: white;
+  background: var(--bg);
+  color: var(--fg);
   font-family: 'Inter', system-ui, sans-serif;
   overscroll-behavior: none;
+  -webkit-font-smoothing: antialiased;
 }
 
-/* Remove scrollbar on mobile */
-::-webkit-scrollbar { display: none; }
-* { scrollbar-width: none; }
-
-.card-shine {
-  background: linear-gradient(
-    135deg,
-    rgba(255,255,255,0.05) 0%,
-    rgba(255,255,255,0.0) 50%,
-    rgba(255,255,255,0.03) 100%
-  );
+/* ── Neomorphism utilities ──────────────────────────────────────── */
+.neo {
+  background: var(--bg);
+  box-shadow: 6px 6px 16px var(--sh-dark), -6px -6px 16px var(--sh-light);
 }
 
-.points-glow {
-  text-shadow: 0 0 40px rgba(255, 107, 53, 0.6),
-               0 0 80px rgba(255, 107, 53, 0.3);
+.neo-sm {
+  background: var(--bg);
+  box-shadow: 3px 3px 8px var(--sh-dark), -3px -3px 8px var(--sh-light);
+}
+
+.neo-inset {
+  background: var(--bg-deep);
+  box-shadow: inset 4px 4px 10px var(--sh-dark), inset -4px -4px 10px var(--sh-light);
+}
+
+.neo-inset-sm {
+  background: var(--bg-deep);
+  box-shadow: inset 2px 2px 6px var(--sh-dark), inset -2px -2px 6px var(--sh-light);
+}
+
+/* Active/pressed state for buttons */
+.neo-btn {
+  background: var(--bg);
+  box-shadow: 4px 4px 10px var(--sh-dark), -4px -4px 10px var(--sh-light);
+  transition: box-shadow 0.15s ease, transform 0.1s ease;
+}
+.neo-btn:active {
+  box-shadow: inset 3px 3px 7px var(--sh-dark), inset -3px -3px 7px var(--sh-light);
+  transform: scale(0.98);
+}
+
+/* Accent button */
+.neo-btn-accent {
+  background: linear-gradient(135deg, #ff4a4a, #e03030);
+  box-shadow: 4px 4px 12px rgba(255, 74, 74, 0.35), -2px -2px 8px rgba(255,255,255,0.08);
+  transition: box-shadow 0.15s ease, transform 0.1s ease;
+}
+.neo-btn-accent:active {
+  box-shadow: inset 3px 3px 6px rgba(0,0,0,0.2), 0 0 0 rgba(0,0,0,0);
+  transform: scale(0.98);
+}
+
+/* ── Scrollbar ──────────────────────────────────────────────────── */
+@media (min-width: 768px) {
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--sh-dark); border-radius: 4px; }
+}
+@media (max-width: 767px) {
+  ::-webkit-scrollbar { display: none; }
+  * { scrollbar-width: none; }
+}
+
+/* ── Progress bar glow ──────────────────────────────────────────── */
+.progress-fill {
+  background: linear-gradient(90deg, #ff4a4a, #ff7070);
+  box-shadow: 0 0 8px rgba(255, 74, 74, 0.5);
+  border-radius: 99px;
+  transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
 }

@@ -1,0 +1,20 @@
+.popolo-wrap h1 { display: flex; align-items: center; gap: 10px; }
+.popolo-wrap .version { font-size: 13px; font-weight: 400; color: #777; background: #f0f0f0; padding: 2px 8px; border-radius: 3px; }
+
+.popolo-test-bar { margin: 12px 0 20px; display: flex; align-items: center; gap: 12px; }
+.popolo-test-bar #popolo-test-result { font-weight: 600; }
+#popolo-test-result.popolo-ok    { color: #1a7a1a; }
+#popolo-test-result.popolo-error { color: #c0392b; }
+
+.popolo-log-table { margin-top: 12px; font-size: 13px; }
+.popolo-log-table .popolo-detail { color: #555; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.popolo-badge { display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; }
+.popolo-badge.ok   { background: #d4edda; color: #155724; }
+.popolo-badge.warn { background: #fff3cd; color: #856404; }
+.popolo-badge.err  { background: #f8d7da; color: #721c24; }
+.popolo-badge.muted{ background: #e2e3e5; color: #41464b; }
+
+.subsubsub { margin-bottom: 8px; }
+.subsubsub li { display: inline; }
+.subsubsub a.current { font-weight: 700; }
