@@ -140,9 +140,29 @@ class Popolo_Registration {
                 'synced_at'      => current_time('mysql'),
             ]);
 
+            // Create WooCommerce customer if not already registered
+            $wc_note = '';
+            if (!email_exists($email)) {
+                $user_id = wc_create_new_customer($email, $email, wp_generate_password(12, false));
+                if (!is_wp_error($user_id)) {
+                    wp_update_user([
+                        'ID'         => $user_id,
+                        'first_name' => $name,
+                        'last_name'  => $lastname,
+                        'display_name' => $partner_name,
+                    ]);
+                    update_user_meta($user_id, 'billing_first_name', $name);
+                    update_user_meta($user_id, 'billing_last_name',  $lastname);
+                    update_user_meta($user_id, 'billing_email',      $email);
+                    update_user_meta($user_id, 'billing_phone',      preg_replace('/[\s\-\(\)\+]/', '', $phone));
+                }
+            } else {
+                $wc_note = ' Tu cuenta de WooCommerce ya existe.';
+            }
+
             $msg = $welcome_points > 0
-                ? sprintf('¡Bienvenido/a <strong>%s</strong>! Te hemos asignado <strong>%d puntos</strong> por registrarte en el programa de lealtad.', esc_html($partner_name), $welcome_points)
-                : sprintf('¡Bienvenido/a <strong>%s</strong>! Ya eres parte del programa de lealtad.', esc_html($partner_name));
+                ? sprintf('¡Bienvenido/a <strong>%s</strong>! Te hemos asignado <strong>%d puntos</strong> por registrarte en el programa de lealtad. Revisa tu correo para acceder a tu cuenta.%s', esc_html($partner_name), $welcome_points, $wc_note)
+                : sprintf('¡Bienvenido/a <strong>%s</strong>! Ya eres parte del programa de lealtad. Revisa tu correo para acceder a tu cuenta.%s', esc_html($partner_name), $wc_note);
 
             wp_send_json([
                 'success'        => true,
