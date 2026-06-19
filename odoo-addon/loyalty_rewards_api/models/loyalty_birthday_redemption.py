@@ -22,6 +22,91 @@ class LoyaltyBirthdayRedemption(models.Model):
     redeemed_by    = fields.Char(string='Canjeado por')
     notes          = fields.Char(string='Notas')
 
+    # ── POS-callable methods ──────────────────────────────────────────────────
+
+    @api.model
+    def pos_get_birthday_info(self, partner_id):
+        """Called from POS: returns birthday status and gift product for a partner."""
+        partner = self.env['res.partner'].sudo().browse(partner_id)
+        if not partner.exists() or not partner.loyalty_birth_date:
+            return {'is_today': False, 'benefit_available': False}
+
+        peru_tz    = pytz.timezone('America/Lima')
+        today_peru = datetime.now(peru_tz).date()
+        birth      = partner.loyalty_birth_date
+
+        if birth.month != today_peru.month or birth.day != today_peru.day:
+            return {'is_today': False, 'benefit_available': False}
+
+        already_used = bool(self.sudo().search([
+            ('partner_id', '=', partner_id),
+            ('year',       '=', today_peru.year),
+            ('source',     '=', 'cashier'),
+        ], limit=1))
+
+        icp     = self.env['ir.config_parameter'].sudo()
+        pid_str = icp.get_param('loyalty_rewards_api.birthday_product_id', '')
+        product_info = None
+        if pid_str and pid_str.isdigit():
+            tmpl = self.env['product.template'].sudo().browse(int(pid_str))
+            if tmpl.exists():
+                variant = tmpl.product_variant_ids[:1]
+                if variant:
+                    product_info = {
+                        'name':                tmpl.name,
+                        'product_template_id': tmpl.id,
+                        'product_id':          variant.id,
+                    }
+
+        return {
+            'is_today':        True,
+            'partner_id':      partner_id,
+            'partner_name':    partner.name,
+            'benefit_available': not already_used,
+            'already_used':    already_used,
+            'product':         product_info,
+        }
+
+    @api.model
+    def pos_redeem_birthday(self, partner_id, cashier_name='Cajero POS'):
+        """Called from POS when cashier grants the birthday gift product."""
+        peru_tz    = pytz.timezone('America/Lima')
+        today_peru = datetime.now(peru_tz).date()
+
+        already = self.sudo().search([
+            ('partner_id', '=', partner_id),
+            ('year',       '=', today_peru.year),
+            ('source',     '=', 'cashier'),
+        ], limit=1)
+        if already:
+            return {'success': False, 'error': 'Ya fue canjeado este año'}
+
+        icp     = self.env['ir.config_parameter'].sudo()
+        pid_str = icp.get_param('loyalty_rewards_api.birthday_product_id', '')
+        product_name = None
+        product_id   = None
+        if pid_str and pid_str.isdigit():
+            tmpl = self.env['product.template'].sudo().browse(int(pid_str))
+            if tmpl.exists():
+                product_name = tmpl.name
+                variant = tmpl.product_variant_ids[:1]
+                if variant:
+                    product_id = variant.id
+
+        self.sudo().create({
+            'partner_id':  partner_id,
+            'year':        today_peru.year,
+            'redeemed_at': fields.Datetime.now(),
+            'source':      'cashier',
+            'product_id':  product_id,
+            'product_name': product_name,
+            'redeemed_by': cashier_name,
+            'notes':       'Canje de regalo de cumpleaños desde POS.',
+        })
+        return {'success': True}
+
+    # ── Cron ─────────────────────────────────────────────────────────────────
+
     @api.model
     def _cron_award_birthday_points(self):
         """Cron diario: otorga puntos de cumpleaños a clientes cuyo cumpleaños es hoy (hora Perú)."""
