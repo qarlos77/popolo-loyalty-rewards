@@ -490,8 +490,10 @@ class LoyaltyAPI(http.Controller):
                     pass
 
             # --- Welcome points bonus (only for new cards) ---
-            welcome_awarded = 0
-            welcome_cfg = int(float(icp.get_param('loyalty_rewards_api.welcome_points', '0')))
+            welcome_awarded  = 0
+            odoo_welcome_cfg = int(float(icp.get_param('loyalty_rewards_api.welcome_points', '0')))
+            req_welcome_cfg  = int(float(body.get('welcome_points', 0)))
+            welcome_cfg      = odoo_welcome_cfg if odoo_welcome_cfg > 0 else req_welcome_cfg
             if grant_welcome and welcome_cfg > 0 and (partner_created or card_was_new):
                 card.sudo().write({'points': card.points + welcome_cfg})
                 welcome_awarded = welcome_cfg
@@ -591,8 +593,10 @@ class LoyaltyAPI(http.Controller):
                 'partner_id': partner.id, 'program_id': program.id, 'points': 0,
             })
 
-            # Award welcome points
-            welcome_pts = int(float(icp.get_param('loyalty_rewards_api.welcome_points', '0')))
+            # Award welcome points (prefer Odoo config; fall back to value sent by WordPress)
+            odoo_welcome = int(float(icp.get_param('loyalty_rewards_api.welcome_points', '0')))
+            req_welcome  = int(float(body.get('welcome_points', 0)))
+            welcome_pts  = odoo_welcome if odoo_welcome > 0 else req_welcome
             if welcome_pts > 0:
                 card.sudo().write({'points': welcome_pts})
                 try:

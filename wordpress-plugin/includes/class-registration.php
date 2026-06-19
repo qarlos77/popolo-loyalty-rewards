@@ -113,10 +113,11 @@ class Popolo_Registration {
 
         $client = new Popolo_API_Client($odoo_url, $api_key);
         $result = $client->register_loyalty([
-            'name'      => $name,
-            'last_name' => $lastname,
-            'email'     => strtolower($email),
-            'phone'     => preg_replace('/[\s\-\(\)\+]/', '', $phone),
+            'name'           => $name,
+            'last_name'      => $lastname,
+            'email'          => strtolower($email),
+            'phone'          => preg_replace('/[\s\-\(\)\+]/', '', $phone),
+            'welcome_points' => (int) get_option('popolo_loyalty_welcome_points', 10),
         ]);
 
         if ($result['success']) {

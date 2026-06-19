@@ -102,6 +102,7 @@ class Popolo_Order_Sync {
             'customer_name'        => trim($order->get_billing_first_name() . ' ' . $order->get_billing_last_name()),
             'customer_email'       => $order->get_billing_email(),
             'grant_welcome_points' => $join_loyalty === '1',
+            'welcome_points'       => (int) get_option('popolo_loyalty_welcome_points', 10),
         ]);
 
         $body = $result['body'];
