@@ -48,6 +48,12 @@ class ResConfigSettings(models.TransientModel):
         default=0.1,
         help='Puntos por cada 1 unidad de moneda. Ejemplo: 0.1 = 1 punto por S/.10.',
     )
+    loyalty_welcome_points = fields.Integer(
+        string='Puntos por registro',
+        config_parameter='loyalty_rewards_api.welcome_points',
+        default=10,
+        help='Puntos otorgados al cliente al registrarse por primera vez en el programa de lealtad.',
+    )
 
     def action_generate_sync_api_key(self):
         key = ''.join(secrets.choice(_ALPHABET) for _ in range(16))

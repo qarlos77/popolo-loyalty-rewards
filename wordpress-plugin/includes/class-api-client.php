@@ -71,6 +71,42 @@ class Popolo_API_Client {
     }
 
     /**
+     * Register a new loyalty member (standalone registration page).
+     */
+    public function register_loyalty(array $payload): array {
+        $url = $this->base_url . '/api/loyalty/register';
+
+        $response = wp_remote_post($url, [
+            'timeout' => 15,
+            'headers' => [
+                'Content-Type' => 'application/json',
+                'X-API-Key'    => $this->api_key,
+            ],
+            'body' => wp_json_encode($payload),
+        ]);
+
+        if (is_wp_error($response)) {
+            return [
+                'success'            => false,
+                'already_registered' => false,
+                'http_code'          => 0,
+                'body'               => ['error' => $response->get_error_message()],
+            ];
+        }
+
+        $http_code = wp_remote_retrieve_response_code($response);
+        $raw_body  = wp_remote_retrieve_body($response);
+        $body      = json_decode($raw_body, true) ?? ['raw' => $raw_body];
+
+        return [
+            'success'            => $http_code === 200 && !empty($body['success']),
+            'already_registered' => $http_code === 409 && !empty($body['already_registered']),
+            'http_code'          => $http_code,
+            'body'               => $body,
+        ];
+    }
+
+    /**
      * Test connectivity: calls Odoo /web/health.
      */
     public function test_connection(): array {

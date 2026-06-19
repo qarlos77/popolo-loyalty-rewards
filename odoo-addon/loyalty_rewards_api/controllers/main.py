@@ -361,11 +361,12 @@ class LoyaltyAPI(http.Controller):
 
         partner = _find_partner_by_email(request.env, email)
         if not partner:
-            return _json_response({'found': False, 'email': email}, 200)
+            return _json_response({'found': False, 'has_card': False, 'email': email}, 200)
 
         cards = request.env['loyalty.card'].sudo().search([('partner_id', '=', partner.id)])
         return _json_response({
             'found':        True,
+            'has_card':     bool(cards),
             'partner_name': partner.name,
             'email':        partner.email,
             'total_points': sum(c.points for c in cards),
@@ -389,13 +390,14 @@ class LoyaltyAPI(http.Controller):
         except Exception:
             return _json_response({'error': 'Invalid JSON'}, 400)
 
-        order_id      = str(body.get('order_id', '')).strip()
-        email_raw     = str(body.get('customer_email', '')).strip().lower()
-        phone_raw     = str(body.get('phone', '')).strip()
-        order_total   = float(body.get('order_total', 0))
-        currency      = body.get('currency', 'PEN')
-        source        = body.get('source', 'woocommerce')
-        customer_name = str(body.get('customer_name', '')).strip()
+        order_id           = str(body.get('order_id', '')).strip()
+        email_raw          = str(body.get('customer_email', '')).strip().lower()
+        phone_raw          = str(body.get('phone', '')).strip()
+        order_total        = float(body.get('order_total', 0))
+        currency           = body.get('currency', 'PEN')
+        source             = body.get('source', 'woocommerce')
+        customer_name      = str(body.get('customer_name', '')).strip()
+        grant_welcome      = bool(body.get('grant_welcome_points', False))
 
         if not order_id or not email_raw:
             return _json_response({'error': 'order_id and customer_email are required'}, 400)
@@ -438,6 +440,7 @@ class LoyaltyAPI(http.Controller):
 
             # --- Find or create loyalty card ---
             cards = request.env['loyalty.card'].sudo().search([('partner_id', '=', partner.id)])
+            card_was_new = False
             if not cards:
                 program = request.env['loyalty.program'].sudo().search([
                     ('program_type', '=', 'loyalty'), ('active', '=', True),
@@ -454,14 +457,15 @@ class LoyaltyAPI(http.Controller):
                 cards = request.env['loyalty.card'].sudo().create({
                     'partner_id': partner.id, 'program_id': program.id, 'points': 0,
                 })
+                card_was_new = True
 
             card = cards[0] if len(cards) > 1 else cards
 
-            # --- Calculate and award points ---
+            # --- Calculate and award order points ---
             ratio  = float(icp.get_param('loyalty_rewards_api.points_ratio', '0.1'))
             points = int(order_total * ratio)
 
-            if points <= 0:
+            if points <= 0 and not grant_welcome:
                 SyncLog.create({
                     'external_order_id': order_id, 'source': source,
                     'email': email_raw, 'phone': phone_raw, 'partner_id': partner.id,
@@ -475,34 +479,146 @@ class LoyaltyAPI(http.Controller):
                     'note': f'Monto mínimo para ganar puntos: {int(1/ratio)} {currency}',
                 })
 
-            card.sudo().write({'points': card.points + points})
-            try:
-                request.env['loyalty.history'].sudo().create({
-                    'card_id': card.id, 'description': f'Compra por la web #{order_id}',
-                    'issued': points, 'used': 0,
-                })
-            except Exception:
-                pass  # history log is optional; don't roll back the points update
+            if points > 0:
+                card.sudo().write({'points': card.points + points})
+                try:
+                    request.env['loyalty.history'].sudo().create({
+                        'card_id': card.id, 'description': f'Compra por la web #{order_id}',
+                        'issued': points, 'used': 0,
+                    })
+                except Exception:
+                    pass
 
-            created_note = ' (contacto creado automáticamente)' if partner_created else ''
+            # --- Welcome points bonus (only for new cards) ---
+            welcome_awarded = 0
+            welcome_cfg = int(float(icp.get_param('loyalty_rewards_api.welcome_points', '0')))
+            if grant_welcome and welcome_cfg > 0 and (partner_created or card_was_new):
+                card.sudo().write({'points': card.points + welcome_cfg})
+                welcome_awarded = welcome_cfg
+                try:
+                    request.env['loyalty.history'].sudo().create({
+                        'card_id': card.id, 'description': 'Bienvenida al programa de lealtad',
+                        'issued': welcome_cfg, 'used': 0,
+                    })
+                except Exception:
+                    pass
+
+            total_awarded = points + welcome_awarded
+            created_note  = ' (contacto creado automáticamente)' if partner_created else ''
+            welcome_note  = f' +{welcome_awarded} bienvenida' if welcome_awarded else ''
             SyncLog.create({
                 'external_order_id': order_id, 'source': source,
                 'email': email_raw, 'phone': phone_raw, 'partner_id': partner.id,
                 'order_total': order_total, 'currency': currency,
-                'points_awarded': points, 'state': 'synced',
-                'message': f'OK — {points} pts. Saldo: {card.points}{created_note}',
+                'points_awarded': total_awarded, 'state': 'synced',
+                'message': f'OK — {points} pts compra{welcome_note}. Saldo: {card.points}{created_note}',
             })
 
-            self._notify_whatsapp_earned(partner, points, card.points)
+            self._notify_whatsapp_earned(partner, total_awarded, card.points)
 
             return _json_response({
-                'success':         True,
-                'partner_name':    partner.name,
-                'partner_email':   partner.email,
-                'partner_created': partner_created,
-                'points_awarded':  points,
-                'total_points':    card.points,
-                'card_code':       card.code,
+                'success':                True,
+                'partner_name':           partner.name,
+                'partner_email':          partner.email,
+                'partner_created':        partner_created,
+                'points_awarded':         points,
+                'welcome_points_awarded': welcome_awarded,
+                'total_points':           card.points,
+                'card_code':              card.code,
+            })
+
+        except Exception as exc:
+            request.env.cr.rollback()
+            return _json_response({'error': f'Internal error: {exc}'}, 500)
+
+    # ── Loyalty registration (standalone page / checkout enrollment) ─────────
+    @http.route('/api/loyalty/register', type='http', auth='none',
+                methods=['POST'], csrf=False)
+    def register_loyalty(self, **kw):
+        icp        = request.env['ir.config_parameter'].sudo()
+        stored_key = icp.get_param('loyalty_rewards_api.sync_api_key', '')
+        sent_key   = request.httprequest.headers.get('X-API-Key', '')
+        if not stored_key:
+            return _json_response({'error': 'API key not configured in Odoo'}, 503)
+        if sent_key != stored_key:
+            return _json_response({'error': 'Invalid API key'}, 401)
+
+        try:
+            body = json.loads(request.httprequest.data)
+        except Exception:
+            return _json_response({'error': 'Invalid JSON'}, 400)
+
+        name      = str(body.get('name', '')).strip()
+        last_name = str(body.get('last_name', '')).strip()
+        email     = str(body.get('email', '')).strip().lower()
+        phone     = str(body.get('phone', '')).strip()
+
+        if not name or not email:
+            return _json_response({'error': 'name and email are required'}, 400)
+
+        try:
+            SyncLog = request.env['loyalty.sync.log'].sudo()
+
+            partner = _find_partner_by_email(request.env, email)
+            if partner:
+                cards = request.env['loyalty.card'].sudo().search([('partner_id', '=', partner.id)])
+                if cards:
+                    SyncLog.create({
+                        'external_order_id': f'REG-{email}', 'source': 'registration',
+                        'email': email, 'phone': phone, 'partner_id': partner.id,
+                        'state': 'duplicate',
+                        'message': 'Ya registrado en el programa de lealtad.',
+                    })
+                    return _json_response({'already_registered': True, 'partner_name': partner.name}, 409)
+
+            # Create partner if needed
+            full_name = f'{name} {last_name}'.strip()
+            if not partner:
+                partner = request.env['res.partner'].sudo().create({
+                    'name': full_name, 'email': email,
+                    'phone': phone or False, 'customer_rank': 1,
+                })
+
+            # Find active loyalty program
+            program = request.env['loyalty.program'].sudo().search([
+                ('program_type', '=', 'loyalty'), ('active', '=', True),
+            ], limit=1)
+            if not program:
+                return _json_response({'error': 'No active loyalty program configured'}, 503)
+
+            # Create loyalty card
+            card = request.env['loyalty.card'].sudo().create({
+                'partner_id': partner.id, 'program_id': program.id, 'points': 0,
+            })
+
+            # Award welcome points
+            welcome_pts = int(float(icp.get_param('loyalty_rewards_api.welcome_points', '0')))
+            if welcome_pts > 0:
+                card.sudo().write({'points': welcome_pts})
+                try:
+                    request.env['loyalty.history'].sudo().create({
+                        'card_id': card.id, 'description': 'Bienvenida al programa de lealtad',
+                        'issued': welcome_pts, 'used': 0,
+                    })
+                except Exception:
+                    pass
+
+            SyncLog.create({
+                'external_order_id': f'REG-{email}', 'source': 'registration',
+                'email': email, 'phone': phone, 'partner_id': partner.id,
+                'points_awarded': welcome_pts, 'state': 'synced',
+                'message': f'Registro exitoso — {welcome_pts} pts de bienvenida.',
+            })
+
+            self._notify_whatsapp_earned(partner, welcome_pts, card.points)
+
+            return _json_response({
+                'success':        True,
+                'partner_name':   partner.name,
+                'partner_email':  partner.email,
+                'welcome_points': welcome_pts,
+                'total_points':   card.points,
+                'card_code':      card.code,
             })
 
         except Exception as exc:

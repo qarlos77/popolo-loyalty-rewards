@@ -34,6 +34,10 @@
                                  help="Ejemplo: 0.10 → 1 punto por cada S/.10 de compra.">
                             <field name="loyalty_points_ratio"/>
                         </setting>
+                        <setting string="Puntos por registro"
+                                 help="Puntos otorgados al cliente al registrarse por primera vez en el programa de lealtad.">
+                            <field name="loyalty_welcome_points"/>
+                        </setting>
                     </block>
 
                     <block title="WhatsApp (Meta Cloud API)">

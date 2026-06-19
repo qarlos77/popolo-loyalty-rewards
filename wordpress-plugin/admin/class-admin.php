@@ -45,8 +45,9 @@ class Popolo_Admin {
         register_setting('popolo_loyalty_group', 'popolo_loyalty_odoo_url',      ['sanitize_callback' => 'esc_url_raw']);
         register_setting('popolo_loyalty_group', 'popolo_loyalty_api_key',       ['sanitize_callback' => 'sanitize_text_field']);
         register_setting('popolo_loyalty_group', 'popolo_loyalty_trigger_status',['sanitize_callback' => 'sanitize_text_field']);
-        register_setting('popolo_loyalty_group', 'popolo_loyalty_enabled',       ['sanitize_callback' => 'absint']);
+        register_setting('popolo_loyalty_group', 'popolo_loyalty_enabled',        ['sanitize_callback' => 'absint']);
         register_setting('popolo_loyalty_group', 'popolo_loyalty_phone_field',   ['sanitize_callback' => 'sanitize_text_field']);
+        register_setting('popolo_loyalty_group', 'popolo_loyalty_welcome_points',['sanitize_callback' => 'absint']);
     }
 
     /* ── Assets ───────────────────────────────────────────────────────── */
@@ -141,6 +142,15 @@ class Popolo_Admin {
                             </select>
                         </td>
                     </tr>
+                    <tr>
+                        <th><label for="popolo_welcome_points">Puntos por registro</label></th>
+                        <td>
+                            <input type="number" id="popolo_welcome_points" name="popolo_loyalty_welcome_points"
+                                   value="<?= (int) get_option('popolo_loyalty_welcome_points', 10) ?>"
+                                   min="0" class="small-text">
+                            <p class="description">Puntos otorgados al cliente por registrarse en el programa de lealtad (registro en página o checkbox en checkout).</p>
+                        </td>
+                    </tr>
                 </table>
 
                 <?php submit_button('Guardar configuración'); ?>
@@ -206,9 +216,17 @@ class Popolo_Admin {
         $current_page = max(1, (int) ($_GET['paged'] ?? 1));
         $offset      = ($current_page - 1) * $per_page;
 
-        // Filter by state
+        // Filters: by state or by trigger_status='registration'
         $state_filter = sanitize_text_field($_GET['state'] ?? '');
-        $where        = $state_filter ? $wpdb->prepare("WHERE state = %s", $state_filter) : '';
+        $type_filter  = sanitize_text_field($_GET['type']  ?? '');
+
+        if ($type_filter === 'registration') {
+            $where = $wpdb->prepare("WHERE trigger_status = %s", 'registration');
+        } elseif ($state_filter) {
+            $where = $wpdb->prepare("WHERE state = %s AND trigger_status != %s", $state_filter, 'registration');
+        } else {
+            $where = '';
+        }
 
         $total = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$table} {$where}");
         $rows  = $wpdb->get_results(
@@ -225,15 +243,20 @@ class Popolo_Admin {
             <!-- State filters -->
             <ul class="subsubsub">
                 <?php
-                $states = ['all' => 'Todos', 'synced' => 'Sincronizados', 'no_partner' => 'Sin contacto',
-                           'error' => 'Error', 'duplicate' => 'Duplicados', 'skipped' => 'Omitidos'];
-                $links  = [];
-                foreach ($states as $slug => $label) {
-                    $active = ($state_filter === $slug) || ($slug === 'all' && !$state_filter);
-                    $url    = add_query_arg(['page' => 'popolo-loyalty-log', 'state' => ($slug === 'all' ? '' : $slug)], admin_url('admin.php'));
-                    $cnt    = ($slug === 'all') ? $total : (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM {$table} WHERE state = %s", $slug));
+                $reg_count = (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM {$table} WHERE trigger_status = %s", 'registration'));
+                $tabs = [
+                    ['label' => 'Todos',           'url' => add_query_arg(['page' => 'popolo-loyalty-log', 'state' => '', 'type' => ''], admin_url('admin.php')),               'active' => (!$state_filter && !$type_filter), 'count' => (int) $wpdb->get_var("SELECT COUNT(*) FROM {$table}")],
+                    ['label' => 'Sincronizados',   'url' => add_query_arg(['page' => 'popolo-loyalty-log', 'state' => 'synced', 'type' => ''], admin_url('admin.php')),         'active' => $state_filter === 'synced',       'count' => (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM {$table} WHERE state = %s AND trigger_status != %s", 'synced', 'registration'))],
+                    ['label' => 'Registros',       'url' => add_query_arg(['page' => 'popolo-loyalty-log', 'type' => 'registration', 'state' => ''], admin_url('admin.php')),   'active' => $type_filter === 'registration',  'count' => $reg_count],
+                    ['label' => 'Sin contacto',    'url' => add_query_arg(['page' => 'popolo-loyalty-log', 'state' => 'no_partner', 'type' => ''], admin_url('admin.php')),     'active' => $state_filter === 'no_partner',   'count' => (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM {$table} WHERE state = %s", 'no_partner'))],
+                    ['label' => 'Error',           'url' => add_query_arg(['page' => 'popolo-loyalty-log', 'state' => 'error', 'type' => ''], admin_url('admin.php')),          'active' => $state_filter === 'error',        'count' => (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM {$table} WHERE state = %s", 'error'))],
+                    ['label' => 'Duplicados',      'url' => add_query_arg(['page' => 'popolo-loyalty-log', 'state' => 'duplicate', 'type' => ''], admin_url('admin.php')),      'active' => $state_filter === 'duplicate',    'count' => (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM {$table} WHERE state = %s", 'duplicate'))],
+                ];
+                $links = [];
+                foreach ($tabs as $tab) {
                     $links[] = sprintf('<li><a href="%s" %s>%s <span class="count">(%d)</span></a></li>',
-                        esc_url($url), $active ? 'class="current" aria-current="page"' : '', esc_html($label), $cnt);
+                        esc_url($tab['url']), $tab['active'] ? 'class="current" aria-current="page"' : '',
+                        esc_html($tab['label']), $tab['count']);
                 }
                 echo implode(' | ', $links);
                 ?>
@@ -266,21 +289,28 @@ class Popolo_Admin {
                         'skipped'    => '<span class="popolo-badge muted">Omitido</span>',
                         default      => '<span class="popolo-badge muted">' . esc_html($row['state']) . '</span>',
                     };
-                    $response_data = json_decode($row['odoo_response'] ?? '{}', true);
-                    $detail = $response_data['error']
+                    $response_data   = json_decode($row['odoo_response'] ?? '{}', true);
+                    $detail          = $response_data['error']
                         ?? $response_data['note']
                         ?? (in_array($row['state'], ['error', 'no_card'], true)
                             ? mb_substr(strip_tags($response_data['raw'] ?? wp_json_encode($response_data)), 0, 150)
                             : '');
-                    $order_url     = admin_url('post.php?post=' . $row['order_id'] . '&action=edit');
-                    $can_retry     = in_array($row['state'], ['error', 'no_partner', 'skipped'], true);
+                    $is_registration = ($row['trigger_status'] === 'registration');
+                    $order_url       = admin_url('post.php?post=' . $row['order_id'] . '&action=edit');
+                    $can_retry       = !$is_registration && in_array($row['state'], ['error', 'no_partner', 'skipped'], true);
                     ?>
                     <tr>
                         <td><?= esc_html(wp_date('d/m/Y H:i', strtotime($row['synced_at']))) ?></td>
-                        <td><a href="<?= esc_url($order_url) ?>">#<?= esc_html($row['order_number'] ?: $row['order_id']) ?></a></td>
+                        <td>
+                            <?php if ($is_registration): ?>
+                                <em><?= esc_html($row['order_number'] ?: 'Registro') ?></em>
+                            <?php else: ?>
+                                <a href="<?= esc_url($order_url) ?>">#<?= esc_html($row['order_number'] ?: $row['order_id']) ?></a>
+                            <?php endif; ?>
+                        </td>
                         <td><?= esc_html($row['phone'] ?: '—') ?></td>
-                        <td><?= esc_html(number_format((float)$row['order_total'], 2)) ?></td>
-                        <td><code><?= esc_html($row['trigger_status']) ?></code></td>
+                        <td><?= (float)$row['order_total'] > 0 ? esc_html(number_format((float)$row['order_total'], 2)) : '—' ?></td>
+                        <td><?= $is_registration ? '<strong>Registro al programa</strong>' : '<code>' . esc_html($row['trigger_status']) . '</code>' ?></td>
                         <td><?= $state_label ?></td>
                         <td><?= $row['points_awarded'] > 0 ? '<strong>' . (int)$row['points_awarded'] . '</strong>' : '—' ?></td>
                         <td><?= esc_html($row['partner_name'] ?: '—') ?></td>
