@@ -12,6 +12,9 @@ services:
       - ODOO_BASE_URL=${ODOO_BASE_URL}
       - NEXT_PUBLIC_ODOO_HOST=${NEXT_PUBLIC_ODOO_HOST}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin}
+      - APP_NAME=${APP_NAME:-Rewards}
+      - APP_LOGO_URL=${APP_LOGO_URL:-}
+      - REWARDS_DOMAIN=${REWARDS_DOMAIN:-}
     volumes:
       - config_data:/app/data
     healthcheck:

@@ -1,11 +1,13 @@
 import type { Metadata, Viewport } from 'next'
 import './globals.css'
 
+const appName = process.env.APP_NAME || 'Rewards'
+
 export const metadata: Metadata = {
-  title: 'PopoloPizza Rewards',
-  description: 'Tu programa de lealtad PopoloPizza',
+  title: appName,
+  description: `Tu programa de lealtad ${appName}`,
   manifest: '/manifest.json',
-  appleWebApp: { capable: true, statusBarStyle: 'default', title: 'Rewards' },
+  appleWebApp: { capable: true, statusBarStyle: 'default', title: appName },
 }
 
 export const viewport: Viewport = {
