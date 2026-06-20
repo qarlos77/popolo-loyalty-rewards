@@ -37,6 +37,16 @@ class ResConfigSettings(models.TransientModel):
         config_parameter='loyalty_rewards_api.pin_required',
         default=False,
     )
+    loyalty_wp_webhook_url = fields.Char(
+        string='Odoo Connect — Webhook URL',
+        config_parameter='loyalty_rewards_api.wp_webhook_url',
+        help='URL del endpoint POST en el plugin Odoo Connect de WordPress.',
+    )
+    loyalty_wp_webhook_secret = fields.Char(
+        string='Odoo Connect — Webhook Secret',
+        config_parameter='loyalty_rewards_api.wp_webhook_secret',
+        help='Clave secreta configurada en el plugin Odoo Connect.',
+    )
     loyalty_sync_api_key = fields.Char(
         string='Sync API Key',
         config_parameter='loyalty_rewards_api.sync_api_key',

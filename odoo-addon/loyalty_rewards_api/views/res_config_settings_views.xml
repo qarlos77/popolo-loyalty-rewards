@@ -16,6 +16,14 @@
                     </block>
 
                     <block title="WooCommerce / Integración externa">
+                        <setting string="Odoo Connect — URL del webhook"
+                                 help="URL del endpoint del plugin Odoo Connect en WordPress. Formato: https://www.tutienda.com/wp-json/odoo-connect/v1/sync">
+                            <field name="loyalty_wp_webhook_url" placeholder="https://www.tutienda.com/wp-json/odoo-connect/v1/sync"/>
+                        </setting>
+                        <setting string="Odoo Connect — Clave secreta"
+                                 help="Valor del campo 'Clave secreta' en el panel de Odoo Connect en WordPress.">
+                            <field name="loyalty_wp_webhook_secret" password="True"/>
+                        </setting>
                         <setting string="Sync API Key"
                                  help="Clave compartida con WooCommerce. Cópiala en el plugin de WordPress.">
                             <div class="d-flex align-items-center gap-2 w-100">
