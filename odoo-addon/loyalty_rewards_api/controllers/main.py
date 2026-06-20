@@ -54,6 +54,15 @@ def _reward_to_dict(reward, card_points):
     }
 
 
+def _get_text(val):
+    """Extrae texto legible de campos JSONB multiidioma de Odoo."""
+    if not val:
+        return ''
+    if isinstance(val, dict):
+        return val.get('es_PE') or val.get('en_US') or next(iter(val.values()), '')
+    return str(val)
+
+
 def _find_partner_by_email(env, email):
     email = (email or '').strip().lower()
     if not email:
@@ -236,7 +245,10 @@ class LoyaltyAPI(http.Controller):
         if not partner:
             return _json_response({'error': 'Unauthorized'}, 401)
 
-        cards    = request.env['loyalty.card'].sudo().search([('partner_id', '=', partner.id)])
+        cards    = request.env['loyalty.card'].sudo().search([
+            ('partner_id', '=', partner.id),
+            ('program_id.program_type', '=', 'loyalty'),
+        ])
         card_pts = {c.program_id.id: c.points for c in cards}
         rewards  = request.env['loyalty.reward'].sudo().search([
             ('program_id', 'in', cards.mapped('program_id').ids),
@@ -801,6 +813,298 @@ class LoyaltyAPI(http.Controller):
         except Exception as exc:
             request.env.cr.rollback()
             return _json_response({'error': f'Internal error: {exc}'}, 500)
+
+    # ── Coupons ──────────────────────────────────────────────────────────────
+    @http.route('/api/loyalty/coupons', type='http', auth='none', methods=['GET'], csrf=False)
+    def coupons(self, **kw):
+        token, partner = _auth_partner(request)
+        if not partner:
+            return _json_response({'error': 'Unauthorized'}, 401)
+
+        cards = request.env['loyalty.card'].sudo().search([
+            ('partner_id', '=', partner.id),
+            ('program_id.program_type', '=', 'promo_code'),
+            ('program_id.active', '=', True),
+        ])
+
+        result = []
+        for card in cards:
+            rewards = request.env['loyalty.reward'].sudo().search(
+                [('program_id', '=', card.program_id.id)], limit=1
+            )
+            reward = rewards[0] if rewards else None
+            result.append({
+                'id':              card.id,
+                'code':            card.code,
+                'program_name':    _get_text(card.program_id.name),
+                'points':          card.points,
+                'available':       bool(card.points >= 1 and card.active),
+                'expiration_date': card.expiration_date,
+                'reward': {
+                    'type':         reward.reward_type,
+                    'discount':     reward.discount,
+                    'discount_mode': reward.discount_mode,
+                    'description':  _get_text(reward.description),
+                } if reward else None,
+            })
+
+        return _json_response({'coupons': result})
+
+    # ── Self-registration (público, sin API key) ──────────────────────────────
+    @http.route('/api/loyalty/self-register', type='http', auth='none', methods=['POST'], csrf=False)
+    def self_register(self, **kw):
+        try:
+            body = json.loads(request.httprequest.data)
+        except Exception:
+            return _json_response({'error': 'Invalid JSON'}, 400)
+
+        name           = str(body.get('name', '')).strip()
+        last_name      = str(body.get('last_name', '')).strip()
+        email          = str(body.get('email', '')).strip().lower()
+        phone          = str(body.get('phone', '')).strip()
+        birth_date_raw = str(body.get('birth_date', '')).strip()
+
+        if not name or not email:
+            return _json_response({'error': 'El nombre y el correo son obligatorios'}, 400)
+
+        if not re.match(r'^[^@\s]+@[^@\s]+\.[^@\s]+$', email):
+            return _json_response({'error': 'Correo electrónico inválido'}, 400)
+
+        birth_date_val = False
+        if birth_date_raw:
+            try:
+                _date.fromisoformat(birth_date_raw)
+                birth_date_val = birth_date_raw
+            except ValueError:
+                return _json_response({'error': 'Fecha de nacimiento inválida (usa YYYY-MM-DD)'}, 400)
+
+        try:
+            partner = _find_partner_by_email(request.env, email)
+
+            if partner:
+                cards = request.env['loyalty.card'].sudo().search([('partner_id', '=', partner.id)])
+                if cards:
+                    return _json_response({
+                        'error': 'Este correo ya está registrado en el programa de lealtad. Inicia sesión con tu correo.',
+                        'already_registered': True,
+                    }, 409)
+
+            full_name = f'{name} {last_name}'.strip()
+            if not partner:
+                vals = {'name': full_name, 'email': email, 'phone': phone or False, 'customer_rank': 1}
+                if birth_date_val:
+                    vals['loyalty_birth_date'] = birth_date_val
+                partner = request.env['res.partner'].sudo().create(vals)
+            else:
+                update = {}
+                if birth_date_val and not partner.loyalty_birth_date:
+                    update['loyalty_birth_date'] = birth_date_val
+                if full_name:
+                    update['name'] = full_name
+                if update:
+                    partner.sudo().write(update)
+
+            icp = request.env['ir.config_parameter'].sudo()
+            self._create_wc_customer(
+                icp        = icp,
+                email      = email,
+                first_name = name,
+                last_name  = last_name,
+                phone      = phone,
+            )
+
+            program = request.env['loyalty.program'].sudo().search([
+                ('program_type', '=', 'loyalty'), ('active', '=', True),
+            ], limit=1)
+            if not program:
+                return _json_response({'error': 'No hay un programa de lealtad activo configurado'}, 503)
+
+            card = request.env['loyalty.card'].sudo().create({
+                'partner_id': partner.id, 'program_id': program.id, 'points': 0,
+            })
+
+            icp = request.env['ir.config_parameter'].sudo()
+            welcome_pts = int(float(icp.get_param('loyalty_rewards_api.welcome_points', '0')))
+            if welcome_pts > 0:
+                card.sudo().write({'points': welcome_pts})
+                try:
+                    request.env['loyalty.history'].sudo().create({
+                        'card_id': card.id, 'description': 'Bienvenida al programa de lealtad',
+                        'issued': welcome_pts, 'used': 0,
+                    })
+                except Exception:
+                    pass
+
+            # Asignar cupón de bienvenida (primer pedido / promo_code)
+            coupon_card = None
+            coupon_info = None
+            promo_program = request.env['loyalty.program'].sudo().search([
+                ('program_type', '=', 'promo_code'),
+                ('active', '=', True),
+            ], limit=1)
+            if promo_program:
+                already_has = request.env['loyalty.card'].sudo().search([
+                    ('partner_id', '=', partner.id),
+                    ('program_id', '=', promo_program.id),
+                ], limit=1)
+                if not already_has:
+                    coupon_card = request.env['loyalty.card'].sudo().create({
+                        'partner_id': partner.id,
+                        'program_id': promo_program.id,
+                        'points':     1,
+                    })
+                    reward = request.env['loyalty.reward'].sudo().search(
+                        [('program_id', '=', promo_program.id)], limit=1
+                    )
+                    coupon_info = {
+                        'code':         coupon_card.code,
+                        'program_name': _get_text(promo_program.name),
+                        'description':  _get_text(reward.description) if reward else '',
+                    }
+                    # Replicar cupón en WooCommerce
+                    self._create_wc_coupon(
+                        icp        = icp,
+                        code       = coupon_card.code,
+                        discount   = reward.discount if reward else 0,
+                        email      = email,
+                        desc       = _get_text(promo_program.name),
+                    )
+
+            token_rec = request.env['loyalty.api.token'].sudo().generate_for_partner(
+                partner.id, device_hint='self-registration'
+            )
+
+            try:
+                request.env['loyalty.sync.log'].sudo().create({
+                    'external_order_id': f'SELFREG-{email}', 'source': 'self_registration',
+                    'email': email, 'phone': phone, 'partner_id': partner.id,
+                    'points_awarded': welcome_pts, 'state': 'synced',
+                    'message': (f'Registro propio — {welcome_pts} pts de bienvenida'
+                                + (f' + cupón {coupon_info["code"]}' if coupon_info else '') + '.'),
+                })
+            except Exception:
+                pass
+
+            self._notify_whatsapp_earned(partner, welcome_pts, card.points)
+
+            return _json_response({
+                'success':        True,
+                'token':          token_rec.token,
+                'expires_at':     token_rec.expires_at.isoformat(),
+                'partner': {
+                    'id':        partner.id,
+                    'name':      partner.name,
+                    'email':     partner.email or '',
+                    'phone':     partner.phone or '',
+                    'vat':       partner.vat,
+                    'image_url': f'/web/image/res.partner/{partner.id}/image_128',
+                },
+                'welcome_points': welcome_pts,
+                'total_points':   card.points,
+                'coupon':         coupon_info,
+            })
+
+        except Exception as exc:
+            request.env.cr.rollback()
+            return _json_response({'error': f'Error interno: {exc}'}, 500)
+
+    # ── WooCommerce helpers ───────────────────────────────────────────────────
+    def _create_wc_customer(self, icp, email, first_name, last_name='', phone=''):
+        wc_url    = (icp.get_param('loyalty_rewards_api.wc_url') or '').rstrip('/')
+        wc_key    = icp.get_param('loyalty_rewards_api.wc_consumer_key')
+        wc_secret = icp.get_param('loyalty_rewards_api.wc_consumer_secret')
+        if not (wc_url and wc_key and wc_secret):
+            return
+        try:
+            resp = _req.post(
+                f'{wc_url}/wp-json/wc/v3/customers',
+                auth=(wc_key, wc_secret),
+                json={
+                    'email':      email,
+                    'first_name': first_name,
+                    'last_name':  last_name,
+                    'billing': {
+                        'first_name': first_name,
+                        'last_name':  last_name,
+                        'email':      email,
+                        'phone':      phone or '',
+                    },
+                },
+                timeout=8,
+            )
+            if resp.status_code not in (200, 201):
+                err = {}
+                try:
+                    err = resp.json()
+                except Exception:
+                    pass
+                if err.get('code') == 'registration-error-email-exists':
+                    return  # already exists, not an error
+                try:
+                    request.env['loyalty.sync.log'].sudo().create({
+                        'external_order_id': f'WC-CUSTOMER-{email}',
+                        'source': 'wc_customer',
+                        'email': email,
+                        'state': 'error',
+                        'message': f'WC customer creation failed HTTP {resp.status_code}: {resp.text[:300]}',
+                    })
+                except Exception:
+                    pass
+        except Exception as exc:
+            try:
+                request.env['loyalty.sync.log'].sudo().create({
+                    'external_order_id': f'WC-CUSTOMER-{email}',
+                    'source': 'wc_customer',
+                    'email': email,
+                    'state': 'error',
+                    'message': f'WC customer creation exception: {type(exc).__name__}: {exc}',
+                })
+            except Exception:
+                pass
+
+    def _create_wc_coupon(self, icp, code, discount, email, desc=''):
+        wc_url    = (icp.get_param('loyalty_rewards_api.wc_url') or '').rstrip('/')
+        wc_key    = icp.get_param('loyalty_rewards_api.wc_consumer_key')
+        wc_secret = icp.get_param('loyalty_rewards_api.wc_consumer_secret')
+        if not (wc_url and wc_key and wc_secret):
+            return
+        try:
+            resp = _req.post(
+                f'{wc_url}/wp-json/wc/v3/coupons',
+                auth=(wc_key, wc_secret),
+                json={
+                    'code':                 code,
+                    'discount_type':        'percent',
+                    'amount':               str(int(discount or 0)),
+                    'usage_limit':          1,
+                    'usage_limit_per_user': 1,
+                    'email_restrictions':   [email],
+                    'description':          f'PopoloPizza Rewards — {desc}',
+                },
+                timeout=8,
+            )
+            if resp.status_code not in (200, 201):
+                try:
+                    request.env['loyalty.sync.log'].sudo().create({
+                        'external_order_id': f'WC-COUPON-{code}',
+                        'source': 'wc_coupon',
+                        'email': email,
+                        'state': 'error',
+                        'message': f'WC coupon creation failed HTTP {resp.status_code}: {resp.text[:300]}',
+                    })
+                except Exception:
+                    pass
+        except Exception as exc:
+            try:
+                request.env['loyalty.sync.log'].sudo().create({
+                    'external_order_id': f'WC-COUPON-{code}',
+                    'source': 'wc_coupon',
+                    'email': email,
+                    'state': 'error',
+                    'message': f'WC coupon creation exception: {type(exc).__name__}: {exc}',
+                })
+            except Exception:
+                pass
 
     # ── WhatsApp helpers ──────────────────────────────────────────────────────
     def _notify_whatsapp_earned(self, partner, points_earned, total_points):

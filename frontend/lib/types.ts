@@ -55,6 +55,21 @@ export interface MeResponse {
   birthday?: BirthdayInfo
 }
 
+export interface Coupon {
+  id: number
+  code: string
+  program_name: string
+  points: number
+  available: boolean
+  expiration_date: string | null
+  reward: {
+    type: string
+    discount: number | null
+    discount_mode: string | null
+    description: string
+  } | null
+}
+
 export interface AuthSession {
   token: string
   expires_at: string

@@ -171,7 +171,14 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <p className="text-center text-xs mt-10" style={{ color: 'var(--fg-subtle)' }}>
+          <p className="text-center text-sm mt-7" style={{ color: 'var(--fg-muted)' }}>
+            ¿No tienes cuenta?{' '}
+            <a href="/register" className="font-semibold" style={{ color: 'var(--accent)' }}>
+              Crea una
+            </a>
+          </p>
+
+          <p className="text-center text-xs mt-6" style={{ color: 'var(--fg-subtle)' }}>
             © {new Date().getFullYear()} PopoloPizza
           </p>
         </div>

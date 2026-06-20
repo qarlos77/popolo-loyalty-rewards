@@ -45,6 +45,28 @@ export const odoo = {
       `/history?limit=${limit}`, {}, token,
     ),
 
+  coupons: (token: string) =>
+    apiFetch<{ coupons: import('./types').Coupon[] }>('/coupons', {}, token),
+
+  selfRegister: (data: {
+    name: string
+    last_name: string
+    email: string
+    phone?: string
+    birth_date?: string
+  }) =>
+    apiFetch<{
+      success: boolean
+      token: string
+      expires_at: string
+      partner: import('./types').Partner
+      welcome_points: number
+      total_points: number
+    }>(
+      '/self-register',
+      { method: 'POST', body: JSON.stringify(data) },
+    ),
+
   redeem: (token: string, cardId: number, rewardId: number) =>
     apiFetch<{
       success: boolean
