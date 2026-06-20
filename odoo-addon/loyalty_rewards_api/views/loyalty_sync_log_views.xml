@@ -55,7 +55,7 @@
     <!-- Menu under Loyalty app -->
     <menuitem id="menu_loyalty_sync_log"
               name="Log Sync WooCommerce"
-              parent="website_sale_loyalty.menu_loyalty"
+              parent="loyalty_rewards_api.menu_loyalty_home_root"
               action="action_loyalty_sync_log"
               sequence="50"
               groups="base.group_system"/>

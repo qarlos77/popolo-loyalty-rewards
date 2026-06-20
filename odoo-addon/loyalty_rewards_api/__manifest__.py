@@ -7,6 +7,7 @@
     'depends': ['loyalty', 'point_of_sale', 'pos_loyalty', 'mail', 'base_setup'],
     'data': [
         'security/ir.model.access.csv',
+        'views/loyalty_home_menu.xml',
         'views/res_config_settings_views.xml',
         'views/loyalty_sync_log_views.xml',
         'views/loyalty_birthday_views.xml',

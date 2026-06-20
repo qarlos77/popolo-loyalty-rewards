@@ -71,7 +71,7 @@
     <!-- ── Menu item ──────────────────────────────────────────────────────── -->
     <menuitem id="menu_loyalty_birthday_redemption"
               name="Canjes de Cumpleaños"
-              parent="website_sale_loyalty.menu_loyalty"
+              parent="loyalty_rewards_api.menu_loyalty_home_root"
               action="action_loyalty_birthday_redemption"
               sequence="30"/>
 

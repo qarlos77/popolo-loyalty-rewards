@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- Acción: abre lista de programas de lealtad -->
+    <record id="action_loyalty_programs" model="ir.actions.act_window">
+        <field name="name">Programas de Lealtad</field>
+        <field name="res_model">loyalty.program</field>
+        <field name="view_mode">list,form</field>
+        <field name="domain">[]</field>
+    </record>
+
+    <!-- Menú raíz — aparece en el grid de apps (botón de cuadrícula) -->
+    <record id="menu_loyalty_home_root" model="ir.ui.menu">
+        <field name="name">Lealtad</field>
+        <field name="web_icon">loyalty_rewards_api,static/description/icon.png</field>
+        <field name="sequence">99</field>
+    </record>
+
+    <!-- Submenú: Programas de lealtad -->
+    <menuitem id="menu_loyalty_programs"
+              name="Programas de Lealtad"
+              parent="loyalty_rewards_api.menu_loyalty_home_root"
+              action="action_loyalty_programs"
+              sequence="10"/>
+
+</odoo>
