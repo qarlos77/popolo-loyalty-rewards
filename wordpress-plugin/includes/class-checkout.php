@@ -26,6 +26,10 @@ class Popolo_Checkout {
         // Customer created — handles both My-Account and block checkout
         add_action('woocommerce_created_customer', [$this, 'on_customer_created'], 10);
 
+        // Hide postal code (not used in Peru)
+        add_filter('woocommerce_get_country_locale',      [$this, 'hide_postcode_locale']);
+        add_filter('woocommerce_default_address_fields',  [$this, 'hide_postcode_default']);
+
         // Scripts & styles
         add_action('wp_enqueue_scripts', [$this, 'enqueue_scripts']);
 
@@ -159,6 +163,19 @@ class Popolo_Checkout {
         if ($number && !$type) {
             $errors->add('reg_doc_type_empty', 'Por favor selecciona el tipo de documento.');
         }
+    }
+
+    /* ── Postcode ─────────────────────────────────────────────────────── */
+
+    public function hide_postcode_locale(array $locale): array {
+        $locale['PE']['postcode'] = ['required' => false, 'hidden' => true];
+        return $locale;
+    }
+
+    public function hide_postcode_default(array $fields): array {
+        $fields['postcode']['required'] = false;
+        $fields['postcode']['hidden']   = true;
+        return $fields;
     }
 
     /* ── Odoo sync ────────────────────────────────────────────────────── */
