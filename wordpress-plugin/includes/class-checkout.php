@@ -38,9 +38,8 @@ class Popolo_Checkout {
         );
 
         wp_localize_script('popolo-checkout', 'popoloLoyalty', [
-            'ajaxurl'       => admin_url('admin-ajax.php'),
-            'nonce'         => wp_create_nonce('popolo_get_points'),
-            'welcomePoints' => (int) get_option('popolo_loyalty_welcome_points', 10),
+            'ajaxurl' => admin_url('admin-ajax.php'),
+            'nonce'   => wp_create_nonce('popolo_get_points'),
         ]);
     }
 

@@ -89,27 +89,23 @@ class Popolo_Order_Sync {
             return;
         }
 
-        $join_loyalty = $order->get_meta('_popolo_join_loyalty');
-
         $client  = new Popolo_API_Client($odoo_url, $api_key);
         $result  = $client->sync_order([
-            'order_id'             => (string) $order_id,
-            'phone'                => $phone,
-            'order_total'          => (float) $order->get_total(),
-            'currency'             => $order->get_currency(),
-            'source'               => 'woocommerce',
-            'trigger_status'       => $trigger_status,
-            'customer_name'        => trim($order->get_billing_first_name() . ' ' . $order->get_billing_last_name()),
-            'customer_email'       => $order->get_billing_email(),
-            'grant_welcome_points' => $join_loyalty === '1',
-            'welcome_points'       => (int) get_option('popolo_loyalty_welcome_points', 10),
+            'order_id'       => (string) $order_id,
+            'phone'          => $phone,
+            'order_total'    => (float) $order->get_total(),
+            'currency'       => $order->get_currency(),
+            'source'         => 'woocommerce',
+            'trigger_status' => $trigger_status,
+            'customer_name'  => trim($order->get_billing_first_name() . ' ' . $order->get_billing_last_name()),
+            'customer_email' => $order->get_billing_email(),
         ]);
 
         $body = $result['body'];
 
         if ($result['success']) {
             $log_data['state']          = 'synced';
-            $log_data['points_awarded'] = (int) ($body['points_awarded'] ?? 0) + (int) ($body['welcome_points_awarded'] ?? 0);
+            $log_data['points_awarded'] = (int) ($body['points_awarded'] ?? 0);
             $log_data['partner_name']   = $body['partner_name'] ?? '';
         } elseif (($result['http_code'] === 409) && !empty($body['duplicate'])) {
             $log_data['state']        = 'duplicate';
@@ -125,14 +121,12 @@ class Popolo_Order_Sync {
 
         // Add order note in WooCommerce for visibility
         if ($result['success']) {
-            $created_note  = !empty($body['partner_created']) ? ' (contacto creado en Odoo)' : '';
-            $welcome_note  = !empty($body['welcome_points_awarded']) ? sprintf(' +%d bienvenida', (int) $body['welcome_points_awarded']) : '';
+            $created_note = !empty($body['partner_created']) ? ' (contacto creado en Odoo)' : '';
             $order->add_order_note(sprintf(
-                __('Popolo Loyalty: %d puntos otorgados a %s (total: %d pts)%s%s.', 'popolo-loyalty-sync'),
+                __('Popolo Loyalty: %d puntos otorgados a %s (total: %d pts)%s.', 'popolo-loyalty-sync'),
                 $log_data['points_awarded'],
                 $log_data['partner_name'],
                 (int) ($body['total_points'] ?? 0),
-                $welcome_note,
                 $created_note
             ));
         } elseif ($log_data['state'] === 'no_partner') {
@@ -144,15 +138,7 @@ class Popolo_Order_Sync {
     }
 
     private function get_phone(WC_Order $order): string {
-        $field = get_option('popolo_loyalty_phone_field', 'billing_phone');
-
-        $phone = match ($field) {
-            'billing_phone'  => $order->get_billing_phone(),
-            'shipping_phone' => $order->get_shipping_phone(),
-            default          => $order->get_billing_phone(),
-        };
-
-        // Normalize: remove spaces, dashes, parens, + sign
+        $phone = $order->get_billing_phone();
         return preg_replace('/[\s\-\(\)\+]/', '', $phone ?? '');
     }
 
