@@ -5,13 +5,6 @@ class Popolo_Checkout {
 
     private static ?self $instance = null;
 
-    const DOC_TYPES = [
-        ''          => 'Seleccionar tipo',
-        'DNI'       => 'DNI',
-        'CE'        => 'C.E.',
-        'Pasaporte' => 'Pasaporte',
-    ];
-
     public static function get_instance(): self {
         if (null === self::$instance) {
             self::$instance = new self();
@@ -20,32 +13,23 @@ class Popolo_Checkout {
     }
 
     private function __construct() {
+        // Block checkout: additional fields (doc type + doc number)
+        add_action('woocommerce_init', [$this, 'register_block_fields']);
+
+        // Block checkout: save doc fields + sync to Odoo after order is created
+        add_action('woocommerce_store_api_checkout_order_processed', [$this, 'on_block_order_processed'], 20);
+
+        // My-Account registration doc fields (classic form)
+        add_action('woocommerce_register_form', [$this, 'render_register_doc_fields']);
+        add_action('woocommerce_register_post', [$this, 'validate_register_doc_fields'], 10, 3);
+
+        // Customer created — handles both My-Account and block checkout
+        add_action('woocommerce_created_customer', [$this, 'on_customer_created'], 10);
+
         // Scripts & styles
         add_action('wp_enqueue_scripts', [$this, 'enqueue_scripts']);
 
-        // Billing document fields (checkout)
-        add_filter('woocommerce_billing_fields',   [$this, 'add_billing_doc_fields']);
-        add_action('woocommerce_checkout_process',  [$this, 'validate_checkout_doc_fields']);
-
-        // My-Account registration form doc fields
-        add_action('woocommerce_register_form',    [$this, 'render_register_doc_fields']);
-        add_action('woocommerce_register_post',    [$this, 'validate_register_doc_fields'], 10, 3);
-
-        // Enable "create account" option at checkout
-        add_filter('woocommerce_checkout_registration_enabled', '__return_true');
-
-        // Save on checkout order creation
-        add_action('woocommerce_checkout_create_order', [$this, 'save_order_meta'], 10, 2);
-
-        // Save doc fields + sync to Odoo when WC user is created
-        add_action('woocommerce_created_customer', [$this, 'save_customer_doc_meta']);
-        add_action('woocommerce_created_customer', [$this, 'sync_customer_to_odoo'], 20);
-
-        // Checkout widgets (points / enrollment)
-        add_action('woocommerce_after_checkout_billing_form', [$this, 'render_checkout_widgets']);
-        add_action('woocommerce_thankyou',                    [$this, 'render_thankyou_widget']);
-
-        // Global points badge rendered in footer (logged-in users)
+        // Global points badge in footer (logged-in users, all pages)
         add_action('wp_footer', [$this, 'render_points_badge']);
 
         // AJAX
@@ -53,109 +37,92 @@ class Popolo_Checkout {
         add_action('wp_ajax_nopriv_popolo_get_points', [$this, 'ajax_get_points']);
     }
 
-    /* ── Scripts & styles ────────────────────────────────────────────── */
-    public function enqueue_scripts(): void {
-        if (!get_option('popolo_loyalty_enabled', '1')) {
+    /* ── Block checkout: additional fields ────────────────────────────── */
+
+    public function register_block_fields(): void {
+        if (!function_exists('woocommerce_register_additional_checkout_field')) {
             return;
         }
 
-        $on_checkout   = is_checkout() && !is_order_received_page();
-        $on_order_rcvd = is_order_received_page();
-        $logged_in     = is_user_logged_in();
-
-        // Checkout + order-received: full widget script
-        if ($on_checkout || $on_order_rcvd) {
-            wp_enqueue_script(
-                'popolo-checkout',
-                POPOLO_LOYALTY_PLUGIN_URL . 'includes/checkout.js',
-                ['jquery'],
-                POPOLO_LOYALTY_VERSION,
-                true
-            );
-
-            $cart_total    = ($on_checkout && WC()->cart) ? floatval(WC()->cart->get_total('edit')) : 0;
-            $current_email = $logged_in ? wp_get_current_user()->user_email : '';
-
-            wp_localize_script('popolo-checkout', 'popoloLoyalty', [
-                'ajaxurl'      => admin_url('admin-ajax.php'),
-                'nonce'        => wp_create_nonce('popolo_get_points'),
-                'cartTotal'    => $cart_total,
-                'currentEmail' => $current_email,
-                'userLoggedIn' => $logged_in,
-            ]);
-        }
-
-        // Global badge: all pages, logged-in users only
-        if ($logged_in) {
-            wp_enqueue_script(
-                'popolo-loyalty-header',
-                POPOLO_LOYALTY_PLUGIN_URL . 'includes/loyalty-header.js',
-                ['jquery'],
-                POPOLO_LOYALTY_VERSION,
-                true
-            );
-            wp_enqueue_style(
-                'popolo-loyalty-frontend',
-                POPOLO_LOYALTY_PLUGIN_URL . 'includes/loyalty-frontend.css',
-                [],
-                POPOLO_LOYALTY_VERSION
-            );
-            wp_localize_script('popolo-loyalty-header', 'popoloBadge', [
-                'ajaxurl' => admin_url('admin-ajax.php'),
-                'nonce'   => wp_create_nonce('popolo_get_points'),
-                'email'   => wp_get_current_user()->user_email,
-            ]);
-        }
-    }
-
-    /* ── Billing document fields ─────────────────────────────────────── */
-    public function add_billing_doc_fields(array $fields): array {
-        $user_id    = get_current_user_id();
-        $saved_type = $user_id ? get_user_meta($user_id, 'billing_doc_type',   true) : '';
-        $saved_num  = $user_id ? get_user_meta($user_id, 'billing_doc_number', true) : '';
-
-        $fields['billing_doc_type'] = [
+        woocommerce_register_additional_checkout_field([
+            'id'       => 'popolo-loyalty/doc-type',
             'label'    => 'Tipo de documento',
+            'location' => 'contact',
             'type'     => 'select',
-            'class'    => ['form-row-first'],
-            'options'  => self::DOC_TYPES,
-            'default'  => $saved_type,
+            'options'  => [
+                ['value' => '',          'label' => 'Seleccionar tipo'],
+                ['value' => 'DNI',       'label' => 'DNI'],
+                ['value' => 'CE',        'label' => 'C.E.'],
+                ['value' => 'Pasaporte', 'label' => 'Pasaporte'],
+            ],
             'required' => false,
-            'priority' => 120,
-        ];
-        $fields['billing_doc_number'] = [
-            'label'       => 'Número de documento',
-            'type'        => 'text',
-            'class'       => ['form-row-last'],
-            'default'     => $saved_num,
-            'required'    => false,
-            'priority'    => 121,
-            'maxlength'   => 20,
-            'description' => 'Necesario para acumular puntos de lealtad',
-        ];
-        return $fields;
+        ]);
+
+        woocommerce_register_additional_checkout_field([
+            'id'       => 'popolo-loyalty/doc-number',
+            'label'    => 'Número de documento',
+            'location' => 'contact',
+            'type'     => 'text',
+            'required' => false,
+        ]);
     }
 
-    public function validate_checkout_doc_fields(): void {
-        $type   = sanitize_text_field($_POST['billing_doc_type']   ?? '');
-        $number = sanitize_text_field($_POST['billing_doc_number'] ?? '');
-        if ($type && !$number) {
-            wc_add_notice('Por favor ingresa el número de documento.', 'error');
-        }
-        if ($number && !$type) {
-            wc_add_notice('Por favor selecciona el tipo de documento.', 'error');
+    /* ── Customer created ─────────────────────────────────────────────── */
+
+    /**
+     * Fires for My-Account registration (classic form) and block checkout registration.
+     * My-Account: $_POST has reg_doc_* — save and sync immediately.
+     * Block checkout: no $_POST doc data yet — set flag for on_block_order_processed.
+     */
+    public function on_customer_created(int $customer_id): void {
+        $type   = sanitize_text_field($_POST['reg_doc_type']   ?? '');
+        $number = sanitize_text_field($_POST['reg_doc_number'] ?? '');
+
+        if ($type || $number) {
+            // My-Account classic form
+            if ($type)   update_user_meta($customer_id, 'billing_doc_type',   $type);
+            if ($number) update_user_meta($customer_id, 'billing_doc_number', $number);
+            $this->do_sync_to_odoo($customer_id, $type, $number);
+        } else {
+            // Block checkout — doc fields arrive later with the order
+            update_user_meta($customer_id, '_popolo_new_registration', '1');
         }
     }
 
-    /* ── My-Account registration doc fields ─────────────────────────── */
+    /* ── Block checkout: order processed ──────────────────────────────── */
+
+    public function on_block_order_processed(WC_Order $order): void {
+        $customer_id = $order->get_customer_id();
+        if (!$customer_id) {
+            return;
+        }
+
+        $doc_type   = (string) ($order->get_meta('popolo-loyalty/doc-type')   ?: '');
+        $doc_number = (string) ($order->get_meta('popolo-loyalty/doc-number') ?: '');
+
+        // Always persist doc fields to user meta when present
+        if ($doc_type)   update_user_meta($customer_id, 'billing_doc_type',   $doc_type);
+        if ($doc_number) update_user_meta($customer_id, 'billing_doc_number', $doc_number);
+
+        // Only sync to Odoo for newly registered customers
+        $is_new = get_user_meta($customer_id, '_popolo_new_registration', true);
+        if ($is_new) {
+            delete_user_meta($customer_id, '_popolo_new_registration');
+            $this->do_sync_to_odoo($customer_id, $doc_type, $doc_number);
+        }
+    }
+
+    /* ── My-Account registration doc fields ───────────────────────────── */
+
     public function render_register_doc_fields(): void {
         ?>
         <p class="woocommerce-form-row woocommerce-form-row--first form-row form-row-first">
             <label for="reg_doc_type">Tipo de documento <span class="optional">(opcional)</span></label>
             <select name="reg_doc_type" id="reg_doc_type" class="woocommerce-Input">
-                <?php foreach (self::DOC_TYPES as $val => $label): ?>
-                    <option value="<?= esc_attr($val) ?>"><?= esc_html($label) ?></option>
-                <?php endforeach; ?>
+                <option value="">Seleccionar tipo</option>
+                <option value="DNI">DNI</option>
+                <option value="CE">C.E.</option>
+                <option value="Pasaporte">Pasaporte</option>
             </select>
         </p>
         <p class="woocommerce-form-row woocommerce-form-row--last form-row form-row-last">
@@ -180,90 +147,92 @@ class Popolo_Checkout {
         }
     }
 
-    /* ── Save ────────────────────────────────────────────────────────── */
-    public function save_order_meta(WC_Order $order, array $data): void {
-        if (!empty($_POST['popolo_join_loyalty']) && $_POST['popolo_join_loyalty'] === '1') {
-            $order->update_meta_data('_popolo_join_loyalty', '1');
-        }
+    /* ── Odoo sync ────────────────────────────────────────────────────── */
 
-        $type   = sanitize_text_field($_POST['billing_doc_type']   ?? '');
-        $number = sanitize_text_field($_POST['billing_doc_number'] ?? '');
-
-        if ($type)   $order->update_meta_data('_billing_doc_type',   $type);
-        if ($number) $order->update_meta_data('_billing_doc_number', $number);
-
-        // Persist to user meta when logged in
-        $customer_id = $order->get_customer_id();
-        if ($customer_id) {
-            if ($type)   update_user_meta($customer_id, 'billing_doc_type',   $type);
-            if ($number) update_user_meta($customer_id, 'billing_doc_number', $number);
-        }
-    }
-
-    public function save_customer_doc_meta(int $customer_id): void {
-        // Checkout registration uses billing_* fields; My-Account uses reg_* fields
-        $type   = sanitize_text_field($_POST['billing_doc_type']   ?? $_POST['reg_doc_type']   ?? '');
-        $number = sanitize_text_field($_POST['billing_doc_number'] ?? $_POST['reg_doc_number'] ?? '');
-
-        if ($type)   update_user_meta($customer_id, 'billing_doc_type',   $type);
-        if ($number) update_user_meta($customer_id, 'billing_doc_number', $number);
-    }
-
-    public function sync_customer_to_odoo(int $customer_id): void {
+    private function do_sync_to_odoo(int $customer_id, string $doc_type, string $doc_number): void {
         $odoo_url = get_option('popolo_loyalty_odoo_url', '');
         $api_key  = get_option('popolo_loyalty_api_key',  '');
-        if (empty($odoo_url) || empty($api_key)) return;
+        if (empty($odoo_url) || empty($api_key)) {
+            return;
+        }
 
-        $user   = get_userdata($customer_id);
-        $fname  = get_user_meta($customer_id, 'billing_first_name', true);
-        $lname  = get_user_meta($customer_id, 'billing_last_name',  true);
-        $name   = trim("$fname $lname") ?: ($user->display_name ?: $user->user_email);
-        $phone  = get_user_meta($customer_id, 'billing_phone',      true);
-        $type   = get_user_meta($customer_id, 'billing_doc_type',   true);
-        $number = get_user_meta($customer_id, 'billing_doc_number', true);
+        $user  = get_userdata($customer_id);
+        $fname = get_user_meta($customer_id, 'billing_first_name', true);
+        $lname = get_user_meta($customer_id, 'billing_last_name',  true);
+        $name  = trim("$fname $lname") ?: ($user->display_name ?: $user->user_email);
+        $phone = get_user_meta($customer_id, 'billing_phone', true);
 
         $client = new Popolo_API_Client($odoo_url, $api_key);
         $client->register_customer([
             'email'      => $user->user_email,
             'name'       => $name,
-            'phone'      => $phone  ?: '',
-            'doc_type'   => $type   ?: '',
-            'doc_number' => $number ?: '',
+            'phone'      => $phone      ?: '',
+            'doc_type'   => $doc_type   ?: '',
+            'doc_number' => $doc_number ?: '',
         ]);
     }
 
-    /* ── Checkout widgets ────────────────────────────────────────────── */
-    public function render_checkout_widgets(): void {
-        ?>
-        <div id="popolo-points-widget" style="display:none;margin:12px 0;" class="woocommerce-info"></div>
-        <div id="popolo-enrollment-widget" style="display:none;margin:12px 0;padding:12px 16px;" class="woocommerce-info">
-            <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-weight:normal;margin:0;">
-                <input type="checkbox" id="popolo_join_loyalty_checkbox" style="width:auto;margin:0;flex-shrink:0;">
-                <span id="popolo-enrollment-text">Unirme al programa de lealtad y ganar puntos con esta compra</span>
-            </label>
-        </div>
-        <input type="hidden" name="popolo_join_loyalty" id="popolo_join_loyalty" value="">
-        <?php
+    /* ── Scripts & styles ─────────────────────────────────────────────── */
+
+    public function enqueue_scripts(): void {
+        if (!get_option('popolo_loyalty_enabled', '1')) {
+            return;
+        }
+
+        $logged_in     = is_user_logged_in();
+        $on_checkout   = is_checkout() && !is_order_received_page();
+        $on_order_rcvd = is_order_received_page();
+
+        if ($on_checkout || $on_order_rcvd) {
+            wp_enqueue_script(
+                'popolo-checkout',
+                POPOLO_LOYALTY_PLUGIN_URL . 'includes/checkout.js',
+                ['jquery'],
+                POPOLO_LOYALTY_VERSION,
+                true
+            );
+
+            $cart_total    = ($on_checkout && WC()->cart) ? floatval(WC()->cart->get_total('edit')) : 0;
+            $current_email = $logged_in ? wp_get_current_user()->user_email : '';
+
+            wp_localize_script('popolo-checkout', 'popoloLoyalty', [
+                'ajaxurl'      => admin_url('admin-ajax.php'),
+                'nonce'        => wp_create_nonce('popolo_get_points'),
+                'cartTotal'    => $cart_total,
+                'currentEmail' => $current_email,
+                'userLoggedIn' => $logged_in,
+            ]);
+        }
+
+        // Badge: all pages, logged-in only
+        if ($logged_in) {
+            wp_enqueue_script(
+                'popolo-loyalty-header',
+                POPOLO_LOYALTY_PLUGIN_URL . 'includes/loyalty-header.js',
+                ['jquery'],
+                POPOLO_LOYALTY_VERSION,
+                true
+            );
+            wp_enqueue_style(
+                'popolo-loyalty-frontend',
+                POPOLO_LOYALTY_PLUGIN_URL . 'includes/loyalty-frontend.css',
+                [],
+                POPOLO_LOYALTY_VERSION
+            );
+            wp_localize_script('popolo-loyalty-header', 'popoloBadge', [
+                'ajaxurl' => admin_url('admin-ajax.php'),
+                'nonce'   => wp_create_nonce('popolo_get_points'),
+                'email'   => wp_get_current_user()->user_email,
+            ]);
+        }
     }
 
-    public function render_thankyou_widget(int $order_id): void {
-        if (!get_option('popolo_loyalty_enabled', '1')) return;
-        $order = wc_get_order($order_id);
-        if (!$order) return;
-        $email = $order->get_billing_email();
-        if (!$email) return;
-        ?>
-        <div id="popolo-thankyou-points"
-             data-email="<?= esc_attr($email) ?>"
-             style="display:none;"
-             class="woocommerce-message">
-        </div>
-        <?php
-    }
+    /* ── Badge ────────────────────────────────────────────────────────── */
 
-    /* ── Global points badge ─────────────────────────────────────────── */
     public function render_points_badge(): void {
-        if (!is_user_logged_in() || !get_option('popolo_loyalty_enabled', '1')) return;
+        if (!is_user_logged_in() || !get_option('popolo_loyalty_enabled', '1')) {
+            return;
+        }
         ?>
         <div id="popolo-points-badge" style="display:none;" role="status" aria-live="polite">
             <span class="popolo-badge-icon">🎁</span>
@@ -273,7 +242,8 @@ class Popolo_Checkout {
         <?php
     }
 
-    /* ── AJAX ────────────────────────────────────────────────────────── */
+    /* ── AJAX ─────────────────────────────────────────────────────────── */
+
     public function ajax_get_points(): void {
         check_ajax_referer('popolo_get_points');
 
