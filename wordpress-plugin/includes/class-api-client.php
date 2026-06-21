@@ -71,6 +71,30 @@ class Popolo_API_Client {
     }
 
     /**
+     * Register a WooCommerce customer in Odoo (creates/updates partner with doc info).
+     */
+    public function register_customer(array $payload): array {
+        $url = $this->base_url . '/api/loyalty/wc-register';
+
+        $response = wp_remote_post($url, [
+            'timeout' => 10,
+            'headers' => [
+                'Content-Type' => 'application/json',
+                'X-API-Key'    => $this->api_key,
+            ],
+            'body' => wp_json_encode($payload),
+        ]);
+
+        if (is_wp_error($response)) {
+            return ['success' => false, 'error' => $response->get_error_message()];
+        }
+
+        $code = wp_remote_retrieve_response_code($response);
+        $body = json_decode(wp_remote_retrieve_body($response), true) ?? [];
+        return array_merge(['success' => $code === 200], $body);
+    }
+
+    /**
      * Test connectivity: calls Odoo /web/health.
      */
     public function test_connection(): array {

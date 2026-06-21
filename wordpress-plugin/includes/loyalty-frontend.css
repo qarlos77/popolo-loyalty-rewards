@@ -1,0 +1,32 @@
+/* Popolo Loyalty — Global points badge */
+#popolo-points-badge {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    background: #c0392b;
+    color: #fff;
+    padding: 10px 18px;
+    border-radius: 999px;
+    font-size: 14px;
+    font-weight: 700;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.22);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: default;
+    z-index: 99999;
+    line-height: 1.2;
+    user-select: none;
+}
+
+#popolo-points-badge .popolo-badge-icon {
+    font-size: 16px;
+    line-height: 1;
+}
+
+#popolo-points-badge .popolo-badge-label {
+    font-weight: 400;
+    font-size: 11px;
+    opacity: 0.80;
+    letter-spacing: 0.03em;
+}

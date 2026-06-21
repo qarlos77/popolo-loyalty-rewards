@@ -4,7 +4,7 @@
     var timer     = null;
     var lastEmail = '';
 
-    /* ── Helpers ────────────────────────────────────────────────────────── */
+    /* ── Helpers ─────────────────────────────────────────────────────────── */
 
     function esc(str) {
         return String(str).replace(/[&<>"']/g, function (c) {
@@ -16,12 +16,25 @@
         return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val);
     }
 
-    /* ── Checkout widgets ───────────────────────────────────────────────── */
+    function fmt(n) {
+        return Number(n).toLocaleString('es-PE');
+    }
 
-    function showPointsWidget(name, points) {
-        var msg = 'Hola <strong>' + esc(name) + '</strong> — tienes <strong>'
-            + esc(String(points)) + ' puntos</strong> de lealtad acumulados.';
-        $('#popolo-points-widget').html(msg).slideDown(250);
+    /* ── Checkout widgets ─────────────────────────────────────────────────── */
+
+    function showPointsWidget(name, points, ratio, cartTotal) {
+        var earned = (ratio > 0 && cartTotal > 0) ? Math.floor(cartTotal * ratio) : 0;
+        var after  = points + earned;
+
+        var html = '🎁 Hola <strong>' + esc(name) + '</strong>'
+                 + ' — tienes <strong>' + fmt(points) + ' puntos</strong>';
+
+        if (earned > 0) {
+            html += ' · esta compra suma <strong>+' + fmt(earned) + ' pts</strong>'
+                  + ' · total: <strong>' + fmt(after) + ' pts</strong>';
+        }
+
+        $('#popolo-points-widget').html(html).slideDown(250);
         hideEnrollmentWidget();
     }
 
@@ -30,12 +43,6 @@
     }
 
     function showEnrollmentWidget() {
-        var pts  = parseInt(popoloLoyalty.welcomePoints || 0, 10);
-        var text = 'Unirme al programa de lealtad y ganar puntos con esta compra';
-        if (pts > 0) {
-            text += ' (te regalamos ' + pts + ' puntos de bienvenida)';
-        }
-        $('#popolo-enrollment-text').text(text);
         $('#popolo-enrollment-widget').slideDown(250);
     }
 
@@ -45,9 +52,11 @@
         $('#popolo_join_loyalty').val('');
     }
 
-    /* ── Email lookup ───────────────────────────────────────────────────── */
+    /* ── Points lookup ────────────────────────────────────────────────────── */
 
     function lookupPoints(email) {
+        var cartTotal = parseFloat(popoloLoyalty.cartTotal || 0);
+
         $.post(popoloLoyalty.ajaxurl, {
             action:      'popolo_get_points',
             _ajax_nonce: popoloLoyalty.nonce,
@@ -55,9 +64,9 @@
         })
         .done(function (data) {
             if (data && data.found && data.has_card) {
-                showPointsWidget(data.partner_name, data.total_points_display || data.total_points);
+                var ratio = parseFloat(data.points_ratio || 0);
+                showPointsWidget(data.partner_name, data.total_points || 0, ratio, cartTotal);
             } else if (data) {
-                // Found but no card, or not found at all — offer enrollment
                 hidePointsWidget();
                 showEnrollmentWidget();
             } else {
@@ -71,7 +80,7 @@
         });
     }
 
-    /* ── Thank-you page: show updated balance after order ───────────────── */
+    /* ── Thank-you page ───────────────────────────────────────────────────── */
 
     function loadThankyouPoints() {
         var $widget = $('#popolo-thankyou-points');
@@ -87,18 +96,25 @@
         })
         .done(function (data) {
             if (data && data.found && data.has_card) {
-                var pts = data.total_points_display || data.total_points;
-                var msg = '¡Gracias por tu compra, <strong>' + esc(data.partner_name) + '</strong>! '
-                    + 'Ahora tienes <strong>' + esc(String(pts)) + ' puntos</strong> de lealtad.';
-                $widget.html(msg).slideDown(300);
+                var pts = data.total_points || 0;
+                $widget.html(
+                    '🎁 ¡Gracias por tu compra, <strong>' + esc(data.partner_name) + '</strong>!'
+                    + ' Ahora tienes <strong>' + fmt(pts) + ' puntos</strong> de lealtad.'
+                ).slideDown(300);
             }
         });
     }
 
-    /* ── Init ───────────────────────────────────────────────────────────── */
+    /* ── Init ─────────────────────────────────────────────────────────────── */
 
     $(function () {
-        // Checkout: listen for email changes
+        // Auto-load for logged-in users
+        if (popoloLoyalty.userLoggedIn && popoloLoyalty.currentEmail) {
+            lastEmail = popoloLoyalty.currentEmail;
+            lookupPoints(popoloLoyalty.currentEmail);
+        }
+
+        // Listen for billing email changes (guest / non-pre-filled)
         $(document).on('input change', '#billing_email', function () {
             var email = $(this).val().trim().toLowerCase();
             if (email === lastEmail) return;
@@ -112,7 +128,7 @@
             timer = setTimeout(function () { lookupPoints(email); }, 700);
         });
 
-        // Checkout: checkbox toggles hidden field
+        // Enrollment checkbox
         $(document).on('change', '#popolo_join_loyalty_checkbox', function () {
             $('#popolo_join_loyalty').val($(this).is(':checked') ? '1' : '');
         });

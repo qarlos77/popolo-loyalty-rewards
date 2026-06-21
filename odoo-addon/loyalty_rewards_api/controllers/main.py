@@ -458,9 +458,10 @@ class LoyaltyAPI(http.Controller):
             'has_card':     bool(cards),
             'partner_name': partner.name,
             'email':        partner.email,
-            'total_points': sum(c.points for c in cards),
+            'total_points': sum(c.points for c in cards if c.program_id.program_type == 'loyalty'),
             'cards':        [_card_to_dict(c) for c in cards],
             'birthday':     _birthday_info(partner, window),
+            'points_ratio': float(icp.get_param('loyalty_rewards_api.points_ratio', '0.1')),
         })
 
     # ── Birthday status ───────────────────────────────────────────────────────
@@ -580,6 +581,77 @@ class LoyaltyAPI(http.Controller):
             'redeemed_at':   redemption.redeemed_at.isoformat(),
             'redemption_id': redemption.id,
         })
+
+    # ── WooCommerce customer registration ────────────────────────────────────
+    @http.route('/api/loyalty/wc-register', type='http', auth='none', methods=['POST'], csrf=False)
+    def wc_register(self, **kw):
+        icp        = request.env['ir.config_parameter'].sudo()
+        stored_key = icp.get_param('loyalty_rewards_api.sync_api_key', '')
+        sent_key   = request.httprequest.headers.get('X-API-Key', '')
+        if not stored_key or sent_key != stored_key:
+            return _json_response({'error': 'Invalid API key'}, 401)
+
+        try:
+            body = json.loads(request.httprequest.data)
+        except Exception:
+            return _json_response({'error': 'Invalid JSON'}, 400)
+
+        email      = str(body.get('email', '')).strip().lower()
+        name       = str(body.get('name', '')).strip()
+        phone      = str(body.get('phone', '')).strip()
+        doc_type   = str(body.get('doc_type', '')).strip()
+        doc_number = str(body.get('doc_number', '')).strip().upper()
+
+        if not email:
+            return _json_response({'error': 'email required'}, 400)
+
+        TYPE_MAP = {
+            'DNI':       'l10n_pe.it_DNI',
+            'CE':        'l10n_latam_base.it_fid',
+            'Pasaporte': 'l10n_latam_base.it_pass',
+        }
+
+        try:
+            partner = _find_partner_by_email(request.env, email)
+            created = False
+
+            if not partner:
+                partner = request.env['res.partner'].sudo().create({
+                    'name':          name or email,
+                    'email':         email,
+                    'phone':         phone or False,
+                    'customer_rank': 1,
+                })
+                created = True
+            else:
+                vals = {}
+                if name and not partner.name:
+                    vals['name'] = name
+                if phone and not partner.phone:
+                    vals['phone'] = phone
+                if vals:
+                    partner.sudo().write(vals)
+
+            if doc_type and doc_number:
+                doc_vals = {'vat': doc_number}
+                xmlid = TYPE_MAP.get(doc_type)
+                if xmlid:
+                    try:
+                        id_type = request.env.ref(xmlid)
+                        doc_vals['l10n_latam_identification_type_id'] = id_type.id
+                    except Exception:
+                        pass
+                partner.sudo().write(doc_vals)
+
+            return _json_response({
+                'success':    True,
+                'partner_id': partner.id,
+                'created':    created,
+            })
+
+        except Exception as exc:
+            request.env.cr.rollback()
+            return _json_response({'error': f'Error: {exc}'}, 500)
 
     # ── WooCommerce sync-order ────────────────────────────────────────────────
     @http.route('/api/loyalty/sync-order', type='http', auth='none', methods=['POST'], csrf=False)
