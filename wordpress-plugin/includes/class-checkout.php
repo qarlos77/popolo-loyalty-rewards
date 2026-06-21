@@ -50,14 +50,16 @@ class Popolo_Checkout {
             'location'          => 'contact',
             'type'              => 'select',
             'options'           => [
-                ['value' => '',          'label' => 'Seleccionar tipo (opcional)'],
+                ['value' => '',          'label' => 'Seleccionar tipo'],
                 ['value' => 'DNI',       'label' => 'DNI'],
                 ['value' => 'CE',        'label' => 'C.E.'],
                 ['value' => 'Pasaporte', 'label' => 'Pasaporte'],
             ],
-            'required'          => false,
+            'required'          => true,
             'validate_callback' => function ($value) {
-                if ($value === '') return true;
+                if (empty($value)) {
+                    return new WP_Error('doc_type_required', 'Por favor selecciona el tipo de documento.');
+                }
                 return in_array($value, ['DNI', 'CE', 'Pasaporte'], true)
                     ? true
                     : new WP_Error('invalid_doc_type', 'Tipo de documento no válido.');
@@ -66,11 +68,14 @@ class Popolo_Checkout {
 
         woocommerce_register_additional_checkout_field([
             'id'                => 'popolo-loyalty/doc-number',
-            'label'             => 'Número de documento (opcional)',
+            'label'             => 'Número de documento',
             'location'          => 'contact',
             'type'              => 'text',
-            'required'          => false,
+            'required'          => true,
             'validate_callback' => function ($value) {
+                if (empty(trim($value))) {
+                    return new WP_Error('doc_number_required', 'Por favor ingresa tu número de documento.');
+                }
                 return true;
             },
         ]);
