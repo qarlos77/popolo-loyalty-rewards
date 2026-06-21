@@ -7,3 +7,4 @@ from . import res_partner
 from . import loyalty_birthday_redemption
 from . import product_webhook
 from . import pos_order
+from . import loyalty_card

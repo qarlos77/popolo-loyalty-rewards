@@ -73,6 +73,23 @@ def _find_partner_by_email(env, email):
     return partner if partner else None
 
 
+def _find_partner(env, email=None, vat=None):
+    """Find partner by email first, then fall back to VAT/document number."""
+    if email:
+        partner = _find_partner_by_email(env, email)
+        if partner:
+            return partner
+    if vat:
+        vat_clean = re.sub(r'\s+', '', (vat or '').strip().upper())
+        if vat_clean:
+            partner = env['res.partner'].sudo().search(
+                [('vat', '=', vat_clean), ('active', '=', True)], limit=1
+            )
+            if partner:
+                return partner
+    return None
+
+
 def _birthday_info(partner, window_days=30, icp=None):
     """Return birthday status dict for a partner (uses Peru/Lima timezone for is_today)."""
     import pytz
@@ -582,6 +599,7 @@ class LoyaltyAPI(http.Controller):
 
         order_id       = str(body.get('order_id', '')).strip()
         email_raw      = str(body.get('customer_email', '')).strip().lower()
+        vat_raw        = str(body.get('customer_vat', '')).strip().upper()
         phone_raw      = str(body.get('phone', '')).strip()
         order_total    = float(body.get('order_total', 0))
         currency       = body.get('currency', 'PEN')
@@ -590,8 +608,8 @@ class LoyaltyAPI(http.Controller):
         grant_welcome  = bool(body.get('grant_welcome_points', False))
         birth_date_raw = str(body.get('birth_date', '')).strip()
 
-        if not order_id or not email_raw:
-            return _json_response({'error': 'order_id and customer_email are required'}, 400)
+        if not order_id or (not email_raw and not vat_raw):
+            return _json_response({'error': 'order_id and customer_email or customer_vat are required'}, 400)
 
         SyncLog = request.env['loyalty.sync.log'].sudo()
 
@@ -613,13 +631,15 @@ class LoyaltyAPI(http.Controller):
                     'points': duplicate.points_awarded,
                 }, 409)
 
-            partner = _find_partner_by_email(request.env, email_raw)
+            partner = _find_partner(request.env, email=email_raw, vat=vat_raw)
             partner_created = False
 
             if not partner:
                 partner = request.env['res.partner'].sudo().create({
-                    'name': customer_name or f'Cliente WC #{order_id}',
-                    'email': email_raw, 'phone': phone_raw or False, 'customer_rank': 1,
+                    'name':  customer_name or f'Cliente WC #{order_id}',
+                    'email': email_raw or False,
+                    'phone': phone_raw or False,
+                    'customer_rank': 1,
                 })
                 partner_created = True
 
@@ -986,14 +1006,7 @@ class LoyaltyAPI(http.Controller):
                         'program_name': _get_text(promo_program.name),
                         'description':  _get_text(reward.description) if reward else '',
                     }
-                    # Replicar cupón en WooCommerce
-                    self._create_wc_coupon(
-                        icp        = icp,
-                        code       = coupon_card.code,
-                        discount   = reward.discount if reward else 0,
-                        email      = email,
-                        desc       = _get_text(promo_program.name),
-                    )
+                    # WooCommerce push is handled automatically by loyalty.card.create()
 
             token_rec = request.env['loyalty.api.token'].sudo().generate_for_partner(
                 partner.id, device_hint='self-registration'
@@ -1083,50 +1096,6 @@ class LoyaltyAPI(http.Controller):
                     'email': email,
                     'state': 'error',
                     'message': f'WC customer creation exception: {type(exc).__name__}: {exc}',
-                })
-            except Exception:
-                pass
-
-    def _create_wc_coupon(self, icp, code, discount, email, desc=''):
-        wc_url    = (icp.get_param('loyalty_rewards_api.wc_url') or '').rstrip('/')
-        wc_key    = icp.get_param('loyalty_rewards_api.wc_consumer_key')
-        wc_secret = icp.get_param('loyalty_rewards_api.wc_consumer_secret')
-        if not (wc_url and wc_key and wc_secret):
-            return
-        try:
-            resp = _req.post(
-                f'{wc_url}/wp-json/wc/v3/coupons',
-                auth=(wc_key, wc_secret),
-                json={
-                    'code':                 code,
-                    'discount_type':        'percent',
-                    'amount':               str(int(discount or 0)),
-                    'usage_limit':          1,
-                    'usage_limit_per_user': 1,
-                    'email_restrictions':   [email],
-                    'description':          f'PopoloPizza Rewards — {desc}',
-                },
-                timeout=8,
-            )
-            if resp.status_code not in (200, 201):
-                try:
-                    request.env['loyalty.sync.log'].sudo().create({
-                        'external_order_id': f'WC-COUPON-{code}',
-                        'source': 'wc_coupon',
-                        'email': email,
-                        'state': 'error',
-                        'message': f'WC coupon creation failed HTTP {resp.status_code}: {resp.text[:300]}',
-                    })
-                except Exception:
-                    pass
-        except Exception as exc:
-            try:
-                request.env['loyalty.sync.log'].sudo().create({
-                    'external_order_id': f'WC-COUPON-{code}',
-                    'source': 'wc_coupon',
-                    'email': email,
-                    'state': 'error',
-                    'message': f'WC coupon creation exception: {type(exc).__name__}: {exc}',
                 })
             except Exception:
                 pass
