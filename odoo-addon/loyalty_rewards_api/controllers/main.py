@@ -643,10 +643,41 @@ class LoyaltyAPI(http.Controller):
                         pass
                 partner.sudo().write(doc_vals)
 
+            # Enroll partner in loyalty program if not already enrolled
+            card         = None
+            welcome_pts  = 0
+            existing_cards = request.env['loyalty.card'].sudo().search([
+                ('partner_id', '=', partner.id),
+                ('program_id.program_type', '=', 'loyalty'),
+            ], limit=1)
+            if not existing_cards:
+                program = request.env['loyalty.program'].sudo().search([
+                    ('program_type', '=', 'loyalty'), ('active', '=', True),
+                ], limit=1)
+                if program:
+                    welcome_pts = int(float(icp.get_param('loyalty_rewards_api.welcome_points', '0')))
+                    card = request.env['loyalty.card'].sudo().create({
+                        'partner_id': partner.id,
+                        'program_id': program.id,
+                        'points':     welcome_pts,
+                    })
+                    if welcome_pts > 0:
+                        try:
+                            request.env['loyalty.history'].sudo().create({
+                                'card_id':     card.id,
+                                'description': 'Bienvenida al programa de lealtad',
+                                'issued':      welcome_pts,
+                                'used':        0,
+                            })
+                        except Exception:
+                            pass
+
             return _json_response({
-                'success':    True,
-                'partner_id': partner.id,
-                'created':    created,
+                'success':        True,
+                'partner_id':     partner.id,
+                'created':        created,
+                'enrolled':       card is not None,
+                'welcome_points': welcome_pts,
             })
 
         except Exception as exc:
