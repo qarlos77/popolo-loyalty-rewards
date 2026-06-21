@@ -45,25 +45,34 @@ class Popolo_Checkout {
         }
 
         woocommerce_register_additional_checkout_field([
-            'id'       => 'popolo-loyalty/doc-type',
-            'label'    => 'Tipo de documento',
-            'location' => 'contact',
-            'type'     => 'select',
-            'options'  => [
-                ['value' => '',          'label' => 'Seleccionar tipo'],
+            'id'                => 'popolo-loyalty/doc-type',
+            'label'             => 'Tipo de documento',
+            'location'          => 'contact',
+            'type'              => 'select',
+            'options'           => [
+                ['value' => '',          'label' => 'Seleccionar tipo (opcional)'],
                 ['value' => 'DNI',       'label' => 'DNI'],
                 ['value' => 'CE',        'label' => 'C.E.'],
                 ['value' => 'Pasaporte', 'label' => 'Pasaporte'],
             ],
-            'required' => false,
+            'required'          => false,
+            'validate_callback' => function ($value) {
+                if ($value === '') return true;
+                return in_array($value, ['DNI', 'CE', 'Pasaporte'], true)
+                    ? true
+                    : new WP_Error('invalid_doc_type', 'Tipo de documento no válido.');
+            },
         ]);
 
         woocommerce_register_additional_checkout_field([
-            'id'       => 'popolo-loyalty/doc-number',
-            'label'    => 'Número de documento',
-            'location' => 'contact',
-            'type'     => 'text',
-            'required' => false,
+            'id'                => 'popolo-loyalty/doc-number',
+            'label'             => 'Número de documento (opcional)',
+            'location'          => 'contact',
+            'type'              => 'text',
+            'required'          => false,
+            'validate_callback' => function ($value) {
+                return true;
+            },
         ]);
     }
 
