@@ -3,7 +3,7 @@
  * Plugin Name: Popolo Loyalty Sync
  * Plugin URI:  https://popolopizza.com
  * Description: Sincroniza puntos de lealtad con Odoo cuando un pedido de WooCommerce alcanza el estado configurado.
- * Version:     1.1.0
+ * Version:     1.2.0
  * Author:      PopoloPizza
  * Text Domain: popolo-loyalty-sync
  * Requires Plugins: woocommerce
@@ -13,7 +13,7 @@
 
 defined('ABSPATH') || exit;
 
-define('POPOLO_LOYALTY_VERSION', '1.1.0');
+define('POPOLO_LOYALTY_VERSION', '1.2.0');
 define('POPOLO_LOYALTY_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('POPOLO_LOYALTY_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('POPOLO_LOYALTY_TABLE',      $GLOBALS['wpdb']->prefix . 'popolo_loyalty_log');
@@ -22,7 +22,6 @@ define('POPOLO_LOYALTY_TABLE',      $GLOBALS['wpdb']->prefix . 'popolo_loyalty_l
 require_once POPOLO_LOYALTY_PLUGIN_DIR . 'includes/class-api-client.php';
 require_once POPOLO_LOYALTY_PLUGIN_DIR . 'includes/class-order-sync.php';
 require_once POPOLO_LOYALTY_PLUGIN_DIR . 'includes/class-checkout.php';
-require_once POPOLO_LOYALTY_PLUGIN_DIR . 'includes/class-registration.php';
 require_once POPOLO_LOYALTY_PLUGIN_DIR . 'admin/class-admin.php';
 
 /* ── Activation: create log table ────────────────────────────────────────── */
@@ -79,7 +78,6 @@ function popolo_loyalty_init() {
 
     Popolo_Order_Sync::get_instance();
     Popolo_Checkout::get_instance();
-    Popolo_Registration::get_instance();
 
     if (is_admin()) {
         Popolo_Admin::get_instance();
