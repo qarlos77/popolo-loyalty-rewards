@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="res_partner_loyalty_enrollment_form" model="ir.ui.view">
+        <field name="name">res.partner.loyalty.enrollment.form</field>
+        <field name="model">res.partner</field>
+        <field name="inherit_id" ref="base.view_partner_form"/>
+        <field name="arch" type="xml">
+
+            <!-- Hidden fields needed for display logic (inside sheet, near name) -->
+            <field name="vat" position="after">
+                <field name="loyalty_is_enrolled" invisible="1"/>
+                <field name="loyalty_missing_fields" invisible="1"/>
+            </field>
+
+            <!-- Enrollment section just before the notebook tabs -->
+            <notebook position="before">
+                <group string="Programa de Lealtad"
+                       name="loyalty_enrollment_group"
+                       groups="point_of_sale.group_pos_user">
+
+                    <!-- Already enrolled -->
+                    <div class="o_field_widget" colspan="2"
+                         invisible="not loyalty_is_enrolled">
+                        <span class="badge rounded-pill text-bg-success fs-6 px-3 py-2">
+                            ✓ Inscrito en el Programa de Lealtad
+                        </span>
+                    </div>
+
+                    <!-- Not enrolled, all fields complete: show enroll button -->
+                    <button name="action_pos_enroll_loyalty"
+                            type="object"
+                            string="Inscribir al Programa de Lealtad"
+                            class="btn-primary"
+                            confirm="¿El cliente confirma que desea inscribirse al programa de lealtad de Popolo Pizza?"
+                            invisible="loyalty_is_enrolled or loyalty_missing_fields != ''"/>
+
+                    <!-- Not enrolled, fields incomplete: show which are missing -->
+                    <field name="loyalty_missing_fields"
+                           string="Faltan datos para inscribir"
+                           readonly="1"
+                           invisible="loyalty_is_enrolled or loyalty_missing_fields == ''"/>
+
+                </group>
+            </notebook>
+
+        </field>
+    </record>
+
+</odoo>

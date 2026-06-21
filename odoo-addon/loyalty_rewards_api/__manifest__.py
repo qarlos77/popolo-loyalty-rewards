@@ -11,12 +11,14 @@
         'views/res_config_settings_views.xml',
         'views/loyalty_sync_log_views.xml',
         'views/loyalty_birthday_views.xml',
+        'views/res_partner_views.xml',
         'data/cron_data.xml',
         'data/mail_template_data.xml',
     ],
     'assets': {
         'point_of_sale._assets_pos': [
             'loyalty_rewards_api/static/src/birthday_reward/birthday_reward.js',
+            'loyalty_rewards_api/static/src/birthday_reward/loyalty_points_display.xml',
         ],
     },
     'installable': True,
