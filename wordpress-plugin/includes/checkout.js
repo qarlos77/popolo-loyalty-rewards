@@ -86,14 +86,12 @@
 
         // Listen for email changes via WooCommerce / wp.data store
         if (typeof wp !== 'undefined' && wp.data) {
-            var unsubscribe = wp.data.subscribe(function () {
+            wp.data.subscribe(function () {
                 var store = wp.data.select('wc/store/cart');
                 if (!store || !store.getCustomerData) return;
                 var billing = store.getCustomerData().billingAddress || {};
                 onEmail(billing.email || '');
             });
-            // Unsubscribe when user navigates away
-            $(window).on('beforeunload', unsubscribe);
         }
 
         // Auto-load for logged-in users
