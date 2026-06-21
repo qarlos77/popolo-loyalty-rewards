@@ -5,6 +5,7 @@ import { patch } from "@web/core/utils/patch";
 import { ControlButtons } from "@point_of_sale/app/screens/product_screen/control_buttons/control_buttons";
 import { SelectionPopup } from "@point_of_sale/app/components/popups/selection_popup/selection_popup";
 import { makeAwaitable } from "@point_of_sale/app/utils/make_awaitable_dialog";
+import { ConfirmationDialog } from "@web/core/confirmation_dialog/confirmation_dialog";
 import { _t } from "@web/core/l10n/translation";
 
 patch(ControlButtons.prototype, {
@@ -13,20 +14,29 @@ patch(ControlButtons.prototype, {
 
     setup() {
         super.setup(...arguments);
-        this.birthdayInfo = useState({ data: null, partnerId: null });
+        this.birthdayInfo    = useState({ data: null, partnerId: null });
+        this.enrollmentInfo  = useState({ data: null, partnerId: null });
 
         onWillRender(() => {
             const partner = this.pos.getOrder()?.getPartner();
             const newId   = partner?.id ?? null;
-            if (newId === this.birthdayInfo.partnerId) return;
 
-            this.birthdayInfo.partnerId = newId;
-            this.birthdayInfo.data      = null;
-            if (newId) this._bgFetchBirthdayInfo(newId);
+            if (newId !== this.birthdayInfo.partnerId) {
+                this.birthdayInfo.partnerId = newId;
+                this.birthdayInfo.data      = null;
+                if (newId) this._bgFetchBirthdayInfo(newId);
+            }
+
+            if (newId !== this.enrollmentInfo.partnerId) {
+                this.enrollmentInfo.partnerId = newId;
+                this.enrollmentInfo.data      = null;
+                if (newId) this._bgFetchEnrollmentInfo(newId);
+            }
         });
     },
 
-    // Background fetch (fire-and-forget) — only updates if partner still matches
+    // ── Birthday fetch ────────────────────────────────────────────────────────
+
     async _bgFetchBirthdayInfo(partnerId) {
         try {
             const info = await this.pos.data.call(
@@ -38,7 +48,6 @@ patch(ControlButtons.prototype, {
         } catch { /* ignore */ }
     },
 
-    // Foreground fetch — always returns fresh data and updates cache
     async _fetchBirthdayInfo(partnerId) {
         try {
             const info = await this.pos.data.call(
@@ -52,6 +61,32 @@ patch(ControlButtons.prototype, {
         }
     },
 
+    // ── Enrollment fetch ──────────────────────────────────────────────────────
+
+    async _bgFetchEnrollmentInfo(partnerId) {
+        try {
+            const info = await this.pos.data.call(
+                "res.partner", "pos_check_loyalty_enrollment", [partnerId]
+            );
+            if (this.enrollmentInfo.partnerId === partnerId) {
+                this.enrollmentInfo.data = info;
+            }
+        } catch { /* ignore */ }
+    },
+
+    async _fetchEnrollmentInfo(partnerId) {
+        try {
+            const info = await this.pos.data.call(
+                "res.partner", "pos_check_loyalty_enrollment", [partnerId]
+            );
+            this.enrollmentInfo.partnerId = partnerId;
+            this.enrollmentInfo.data      = info;
+            return info;
+        } catch {
+            return { enrolled: false, can_enroll: false, missing_fields: [] };
+        }
+    },
+
     // ── Count: highlight button when birthday is available ────────────────────
 
     getPotentialRewards() {
@@ -61,7 +96,6 @@ patch(ControlButtons.prototype, {
         const partner  = order?.getPartner();
         const pending  = order?._birthdayGift?.partnerId === partner?.id;
 
-        // Add virtual birthday entry only when actionable (available and not already in order)
         if (bd?.is_today && bd.benefit_available && !pending) {
             rewards.push({ _birthdayReward: true, _data: bd });
         }
@@ -74,10 +108,14 @@ patch(ControlButtons.prototype, {
         const order   = this.pos.getOrder();
         const partner = order?.getPartner();
 
-        // Always fetch fresh birthday status before showing the list
-        let bd = null;
+        // Fetch fresh data before showing popup
+        let bd         = null;
+        let enrollment = null;
         if (partner?.id) {
-            bd = await this._fetchBirthdayInfo(partner.id);
+            [bd, enrollment] = await Promise.all([
+                this._fetchBirthdayInfo(partner.id),
+                this._fetchEnrollmentInfo(partner.id),
+            ]);
         }
 
         // Loyalty rewards (exclude our virtual birthday sentinel)
@@ -118,6 +156,33 @@ patch(ControlButtons.prototype, {
             }
         }
 
+        // Inject enrollment entry when there is a partner
+        if (partner) {
+            if (enrollment?.enrolled) {
+                list.push({
+                    id:          "loyalty_enrolled",
+                    label:       "⭐ " + _t("Programa de Lealtad"),
+                    description: "✅ " + _t("Cliente ya inscrito en el programa"),
+                    item:        { _type: "enrolled" },
+                });
+            } else if (enrollment?.can_enroll) {
+                list.push({
+                    id:          "loyalty_enroll",
+                    label:       "⭐ " + _t("Inscribir al Programa de Lealtad"),
+                    description: "📋 " + _t("Requiere confirmación del cliente"),
+                    item:        { _type: "enrollment", enrollment },
+                });
+            } else if (enrollment && !enrollment.enrolled) {
+                const missing = enrollment.missing_fields?.join(", ") || _t("datos incompletos");
+                list.push({
+                    id:          "loyalty_enroll_incomplete",
+                    label:       "⭐ " + _t("Inscribir al Programa de Lealtad"),
+                    description: "⚠️  " + _t("Faltan datos: ") + missing,
+                    item:        { _type: "enrollment_incomplete", missing: enrollment.missing_fields },
+                });
+            }
+        }
+
         if (list.length === 0) {
             this.notification.add(_t("No hay recompensas disponibles"), { type: "info" });
             return;
@@ -145,6 +210,22 @@ patch(ControlButtons.prototype, {
             return;
         }
 
+        if (selected._type === "enrolled") {
+            this.notification.add(_t("El cliente ya está inscrito en el programa de lealtad"), { type: "info" });
+            return;
+        }
+
+        if (selected._type === "enrollment_incomplete") {
+            const missing = selected.missing?.join(", ") || _t("datos incompletos");
+            this.notification.add(_t("Faltan datos requeridos: ") + missing, { type: "warning" });
+            return;
+        }
+
+        if (selected._type === "enrollment") {
+            await this._applyLoyaltyEnrollment(partner);
+            return;
+        }
+
         // Normal loyalty reward
         this._applyReward(selected.reward, selected.coupon_id, selected.potentialQty);
     },
@@ -160,7 +241,6 @@ patch(ControlButtons.prototype, {
 
         const cashierName = this.pos.cashier?.name || "Cajero POS";
 
-        // Record redemption in backend immediately to prevent double use
         let result;
         try {
             result = await this.pos.data.call(
@@ -177,7 +257,6 @@ patch(ControlButtons.prototype, {
             return;
         }
 
-        // Load product into POS store if not cached
         let posProduct  = this.pos.models["product.product"].get(product.product_id);
         let posTemplate = this.pos.models["product.template"].get(product.product_template_id);
 
@@ -202,21 +281,58 @@ patch(ControlButtons.prototype, {
             return;
         }
 
-        // Add line at price 0
         await this.pos.addLineToCurrentOrder(
             { product_id: posProduct, product_tmpl_id: posTemplate, qty: 1, price_unit: 0 },
             {}
         );
 
-        // Mark order so the popup shows "pending" if opened again
         const order = this.pos.getOrder();
         order._birthdayGift = { partnerId: partner.id };
-
-        // Update local cache to reflect the used state
         this.birthdayInfo.data = { ...birthdayData, benefit_available: false };
 
         this.notification.add(
             "🎂 " + _t("Regalo de cumpleaños agregado: ") + product.name,
+            { type: "success" }
+        );
+    },
+
+    // ── Apply loyalty enrollment ──────────────────────────────────────────────
+
+    async _applyLoyaltyEnrollment(partner) {
+        // Ask cashier to confirm customer's explicit consent
+        const confirmed = await new Promise((resolve) => {
+            this.dialog.add(ConfirmationDialog, {
+                title: _t("Confirmar inscripción"),
+                body: _t("¿El cliente confirma que desea inscribirse al programa de lealtad de Popolo Pizza?"),
+                confirmLabel: _t("Sí, inscribir"),
+                cancelLabel: _t("Cancelar"),
+                confirm: () => resolve(true),
+                cancel: () => resolve(false),
+            });
+        });
+
+        if (!confirmed) return;
+
+        let result;
+        try {
+            result = await this.pos.data.call(
+                "res.partner", "pos_enroll_in_loyalty", [partner.id]
+            );
+        } catch {
+            this.notification.add(_t("Error al inscribir al cliente"), { type: "danger" });
+            return;
+        }
+
+        if (!result?.success) {
+            this.notification.add(result?.error || _t("No se pudo inscribir al cliente"), { type: "warning" });
+            return;
+        }
+
+        // Update local enrollment cache
+        this.enrollmentInfo.data = { enrolled: true, can_enroll: false, missing_fields: [] };
+
+        this.notification.add(
+            "⭐ " + _t("Cliente inscrito exitosamente en ") + (result.program_name || _t("el programa de lealtad")),
             { type: "success" }
         );
     },
