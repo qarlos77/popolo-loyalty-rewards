@@ -26,9 +26,10 @@ class Popolo_Checkout {
         // Customer created — handles both My-Account and block checkout
         add_action('woocommerce_created_customer', [$this, 'on_customer_created'], 10);
 
-        // Hide postal code (not used in Peru)
-        add_filter('woocommerce_get_country_locale',      [$this, 'hide_postcode_locale']);
-        add_filter('woocommerce_default_address_fields',  [$this, 'hide_postcode_default']);
+        // Hide postal code and company; default state to Lima
+        add_filter('woocommerce_get_country_locale',       [$this, 'adjust_address_locale']);
+        add_filter('woocommerce_default_address_fields',   [$this, 'adjust_address_defaults']);
+        add_filter('woocommerce_customer_default_location', [$this, 'default_lima_state']);
 
         // Scripts & styles
         add_action('wp_enqueue_scripts', [$this, 'enqueue_scripts']);
@@ -165,17 +166,27 @@ class Popolo_Checkout {
         }
     }
 
-    /* ── Postcode ─────────────────────────────────────────────────────── */
+    /* ── Address field adjustments ────────────────────────────────────── */
 
-    public function hide_postcode_locale(array $locale): array {
+    public function adjust_address_locale(array $locale): array {
         $locale['PE']['postcode'] = ['required' => false, 'hidden' => true];
+        $locale['PE']['company']  = ['required' => false, 'hidden' => true];
         return $locale;
     }
 
-    public function hide_postcode_default(array $fields): array {
+    public function adjust_address_defaults(array $fields): array {
         $fields['postcode']['required'] = false;
         $fields['postcode']['hidden']   = true;
+        $fields['company']['required']  = false;
+        $fields['company']['hidden']    = true;
         return $fields;
+    }
+
+    public function default_lima_state(array $location): array {
+        if (($location['country'] ?? '') === 'PE' && empty($location['state'])) {
+            $location['state'] = 'LIM';
+        }
+        return $location;
     }
 
     /* ── Odoo sync ────────────────────────────────────────────────────── */
