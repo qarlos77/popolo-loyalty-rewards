@@ -13,22 +13,27 @@ class Popolo_Checkout {
     }
 
     private function __construct() {
-        // Block checkout: additional fields (doc type + doc number)
+        // Block checkout: additional fields
         add_action('woocommerce_init', [$this, 'register_block_fields']);
 
-        // Block checkout: save doc fields + sync to Odoo after order is created
-        add_action('woocommerce_store_api_checkout_order_processed', [$this, 'on_block_order_processed'], 20);
+        // Capture block checkout data from request (more reliable than order meta)
+        add_action('woocommerce_store_api_checkout_update_order_from_request',
+            [$this, 'capture_block_data'], 10, 2);
 
-        // My-Account registration doc fields (classic form)
-        add_action('woocommerce_register_form', [$this, 'render_register_doc_fields']);
-        add_action('woocommerce_register_post', [$this, 'validate_register_doc_fields'], 10, 3);
+        // Sync to Odoo after block order is fully processed
+        add_action('woocommerce_store_api_checkout_order_processed',
+            [$this, 'on_block_order_processed'], 20);
 
-        // Customer created — handles both My-Account and block checkout
+        // My-Account registration fields (classic form)
+        add_action('woocommerce_register_form',  [$this, 'render_register_doc_fields']);
+        add_action('woocommerce_register_post',  [$this, 'validate_register_doc_fields'], 10, 3);
+
+        // Customer created — My-Account or block checkout
         add_action('woocommerce_created_customer', [$this, 'on_customer_created'], 10);
 
         // Hide postal code and company; default state to Lima
-        add_filter('woocommerce_get_country_locale',       [$this, 'adjust_address_locale']);
-        add_filter('woocommerce_default_address_fields',   [$this, 'adjust_address_defaults']);
+        add_filter('woocommerce_get_country_locale',        [$this, 'adjust_address_locale']);
+        add_filter('woocommerce_default_address_fields',    [$this, 'adjust_address_defaults']);
         add_filter('woocommerce_customer_default_location', [$this, 'default_lima_state']);
 
         // Scripts & styles
@@ -42,7 +47,7 @@ class Popolo_Checkout {
         add_action('wp_ajax_nopriv_popolo_get_points', [$this, 'ajax_get_points']);
     }
 
-    /* ── Block checkout: additional fields ────────────────────────────── */
+    /* ── Block checkout: register additional fields ────────────────────── */
 
     public function register_block_fields(): void {
         if (!function_exists('woocommerce_register_additional_checkout_field')) {
@@ -84,26 +89,61 @@ class Popolo_Checkout {
                 return true;
             },
         ]);
+
+        woocommerce_register_additional_checkout_field([
+            'id'                => 'popolo-loyalty/birth-date',
+            'label'             => 'Fecha de nacimiento',
+            'location'          => 'contact',
+            'type'              => 'text',
+            'required'          => false,
+            'attributes'        => ['type' => 'date'],
+            'validate_callback' => function ($value) {
+                if (empty($value)) return true;
+                $d = DateTime::createFromFormat('Y-m-d', $value);
+                return ($d && $d->format('Y-m-d') === $value)
+                    ? true
+                    : new WP_Error('invalid_birth_date', 'Fecha de nacimiento no válida (usa AAAA-MM-DD).');
+            },
+        ]);
+    }
+
+    /* ── Capture block checkout data from request ─────────────────────── */
+
+    /**
+     * Fires with both $order and $request during Store API checkout.
+     * Reads additional fields directly from the JSON body — more reliable
+     * than reading from order meta in the processed hook.
+     */
+    public function capture_block_data(WC_Order $order, WP_REST_Request $request): void {
+        $body    = (array) ($request->get_json_params() ?: []);
+        $billing = (array) ($body['billing_address'] ?? []);
+
+        // WC blocks may nest contact fields inside billing_address or at top level
+        $doc_type   = sanitize_text_field($billing['popolo-loyalty/doc-type']   ?? $body['popolo-loyalty/doc-type']   ?? '');
+        $doc_number = sanitize_text_field($billing['popolo-loyalty/doc-number'] ?? $body['popolo-loyalty/doc-number'] ?? '');
+        $birth_date = sanitize_text_field($billing['popolo-loyalty/birth-date'] ?? $body['popolo-loyalty/birth-date'] ?? '');
+
+        // Store under simple private meta keys for use in on_block_order_processed
+        if ($doc_type)   $order->update_meta_data('_popolo_doc_type',   $doc_type);
+        if ($doc_number) $order->update_meta_data('_popolo_doc_number', $doc_number);
+        if ($birth_date) $order->update_meta_data('_popolo_birth_date', $birth_date);
     }
 
     /* ── Customer created ─────────────────────────────────────────────── */
 
-    /**
-     * Fires for My-Account registration (classic form) and block checkout registration.
-     * My-Account: $_POST has reg_doc_* — save and sync immediately.
-     * Block checkout: no $_POST doc data yet — set flag for on_block_order_processed.
-     */
     public function on_customer_created(int $customer_id): void {
-        $type   = sanitize_text_field($_POST['reg_doc_type']   ?? '');
-        $number = sanitize_text_field($_POST['reg_doc_number'] ?? '');
+        // My-Account classic form populates $_POST
+        $type       = sanitize_text_field($_POST['reg_doc_type']   ?? '');
+        $number     = sanitize_text_field($_POST['reg_doc_number'] ?? '');
+        $birth_date = sanitize_text_field($_POST['reg_birth_date'] ?? '');
 
-        if ($type || $number) {
-            // My-Account classic form
-            if ($type)   update_user_meta($customer_id, 'billing_doc_type',   $type);
-            if ($number) update_user_meta($customer_id, 'billing_doc_number', $number);
-            $this->do_sync_to_odoo($customer_id, $type, $number);
+        if ($type || $number || $birth_date) {
+            if ($type)       update_user_meta($customer_id, 'billing_doc_type',   $type);
+            if ($number)     update_user_meta($customer_id, 'billing_doc_number', $number);
+            if ($birth_date) update_user_meta($customer_id, 'billing_birth_date', $birth_date);
+            $this->do_sync_to_odoo($customer_id, $type, $number, $birth_date);
         } else {
-            // Block checkout — doc fields arrive later with the order
+            // Block checkout: data arrives with the order
             update_user_meta($customer_id, '_popolo_new_registration', '1');
         }
     }
@@ -116,22 +156,37 @@ class Popolo_Checkout {
             return;
         }
 
-        $doc_type   = (string) ($order->get_meta('popolo-loyalty/doc-type')   ?: '');
-        $doc_number = (string) ($order->get_meta('popolo-loyalty/doc-number') ?: '');
+        // Read doc/birthday from meta set in capture_block_data
+        // Fall back to reading directly from order meta (WC additional fields API)
+        $doc_type   = (string) ($order->get_meta('_popolo_doc_type')   ?: $order->get_meta('popolo-loyalty/doc-type')   ?: '');
+        $doc_number = (string) ($order->get_meta('_popolo_doc_number') ?: $order->get_meta('popolo-loyalty/doc-number') ?: '');
+        $birth_date = (string) ($order->get_meta('_popolo_birth_date') ?: $order->get_meta('popolo-loyalty/birth-date') ?: '');
 
-        // Always persist doc fields to user meta when present
+        // Persist to user meta
         if ($doc_type)   update_user_meta($customer_id, 'billing_doc_type',   $doc_type);
         if ($doc_number) update_user_meta($customer_id, 'billing_doc_number', $doc_number);
+        if ($birth_date) update_user_meta($customer_id, 'billing_birth_date', $birth_date);
 
         // Only sync to Odoo for newly registered customers
         $is_new = get_user_meta($customer_id, '_popolo_new_registration', true);
-        if ($is_new) {
-            delete_user_meta($customer_id, '_popolo_new_registration');
-            $this->do_sync_to_odoo($customer_id, $doc_type, $doc_number);
+        if (!$is_new) {
+            return;
         }
+        delete_user_meta($customer_id, '_popolo_new_registration');
+
+        // Build address from the order (freshly submitted billing data)
+        $address = [
+            'street'       => $order->get_billing_address_1(),
+            'street2'      => $order->get_billing_address_2(),
+            'city'         => $order->get_billing_city(),
+            'state_code'   => $order->get_billing_state(),
+            'country_code' => $order->get_billing_country() ?: 'PE',
+        ];
+
+        $this->do_sync_to_odoo($customer_id, $doc_type, $doc_number, $birth_date, $address);
     }
 
-    /* ── My-Account registration doc fields ───────────────────────────── */
+    /* ── My-Account registration fields ───────────────────────────────── */
 
     public function render_register_doc_fields(): void {
         ?>
@@ -149,7 +204,11 @@ class Popolo_Checkout {
             <input type="text" name="reg_doc_number" id="reg_doc_number"
                    class="woocommerce-Input woocommerce-Input--text input-text"
                    maxlength="20" value="">
-            <span class="description">Para acumular puntos de lealtad</span>
+        </p>
+        <p class="woocommerce-form-row woocommerce-form-row--wide form-row form-row-wide">
+            <label for="reg_birth_date">Fecha de nacimiento <span class="optional">(opcional)</span></label>
+            <input type="date" name="reg_birth_date" id="reg_birth_date"
+                   class="woocommerce-Input woocommerce-Input--text input-text" value="">
         </p>
         <div class="clear"></div>
         <?php
@@ -164,6 +223,45 @@ class Popolo_Checkout {
         if ($number && !$type) {
             $errors->add('reg_doc_type_empty', 'Por favor selecciona el tipo de documento.');
         }
+    }
+
+    /* ── Odoo sync ────────────────────────────────────────────────────── */
+
+    private function do_sync_to_odoo(
+        int    $customer_id,
+        string $doc_type   = '',
+        string $doc_number = '',
+        string $birth_date = '',
+        array  $address    = []
+    ): void {
+        $odoo_url = get_option('popolo_loyalty_odoo_url', '');
+        $api_key  = get_option('popolo_loyalty_api_key',  '');
+        if (empty($odoo_url) || empty($api_key)) {
+            return;
+        }
+
+        $user  = get_userdata($customer_id);
+        $fname = get_user_meta($customer_id, 'billing_first_name', true);
+        $lname = get_user_meta($customer_id, 'billing_last_name',  true);
+        $name  = trim("$fname $lname") ?: ($user->display_name ?: $user->user_email);
+        $phone = get_user_meta($customer_id, 'billing_phone', true);
+
+        $payload = [
+            'email'        => $user->user_email,
+            'name'         => $name,
+            'phone'        => $phone      ?: '',
+            'doc_type'     => $doc_type   ?: '',
+            'doc_number'   => $doc_number ?: '',
+            'birth_date'   => $birth_date ?: '',
+            'street'       => $address['street']       ?? '',
+            'street2'      => $address['street2']      ?? '',
+            'city'         => $address['city']         ?? '',
+            'state_code'   => $address['state_code']   ?? '',
+            'country_code' => $address['country_code'] ?? 'PE',
+        ];
+
+        $client = new Popolo_API_Client($odoo_url, $api_key);
+        $client->register_customer($payload);
     }
 
     /* ── Address field adjustments ────────────────────────────────────── */
@@ -187,31 +285,6 @@ class Popolo_Checkout {
             $location['state'] = 'LIM';
         }
         return $location;
-    }
-
-    /* ── Odoo sync ────────────────────────────────────────────────────── */
-
-    private function do_sync_to_odoo(int $customer_id, string $doc_type, string $doc_number): void {
-        $odoo_url = get_option('popolo_loyalty_odoo_url', '');
-        $api_key  = get_option('popolo_loyalty_api_key',  '');
-        if (empty($odoo_url) || empty($api_key)) {
-            return;
-        }
-
-        $user  = get_userdata($customer_id);
-        $fname = get_user_meta($customer_id, 'billing_first_name', true);
-        $lname = get_user_meta($customer_id, 'billing_last_name',  true);
-        $name  = trim("$fname $lname") ?: ($user->display_name ?: $user->user_email);
-        $phone = get_user_meta($customer_id, 'billing_phone', true);
-
-        $client = new Popolo_API_Client($odoo_url, $api_key);
-        $client->register_customer([
-            'email'      => $user->user_email,
-            'name'       => $name,
-            'phone'      => $phone      ?: '',
-            'doc_type'   => $doc_type   ?: '',
-            'doc_number' => $doc_number ?: '',
-        ]);
     }
 
     /* ── Scripts & styles ─────────────────────────────────────────────── */
@@ -246,7 +319,6 @@ class Popolo_Checkout {
             ]);
         }
 
-        // Badge: all pages, logged-in only
         if ($logged_in) {
             wp_enqueue_script(
                 'popolo-loyalty-header',

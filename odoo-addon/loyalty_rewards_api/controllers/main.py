@@ -596,11 +596,17 @@ class LoyaltyAPI(http.Controller):
         except Exception:
             return _json_response({'error': 'Invalid JSON'}, 400)
 
-        email      = str(body.get('email', '')).strip().lower()
-        name       = str(body.get('name', '')).strip()
-        phone      = str(body.get('phone', '')).strip()
-        doc_type   = str(body.get('doc_type', '')).strip()
-        doc_number = str(body.get('doc_number', '')).strip().upper()
+        email        = str(body.get('email', '')).strip().lower()
+        name         = str(body.get('name', '')).strip()
+        phone        = str(body.get('phone', '')).strip()
+        doc_type     = str(body.get('doc_type', '')).strip()
+        doc_number   = str(body.get('doc_number', '')).strip().upper()
+        birth_date   = str(body.get('birth_date', '')).strip()
+        street       = str(body.get('street',  '')).strip()
+        street2      = str(body.get('street2', '')).strip()
+        city         = str(body.get('city',    '')).strip()
+        state_code   = str(body.get('state_code',   '')).strip().upper()
+        country_code = str(body.get('country_code', 'PE')).strip().upper()
 
         if not email:
             return _json_response({'error': 'email required'}, 400)
@@ -625,13 +631,14 @@ class LoyaltyAPI(http.Controller):
                 created = True
             else:
                 vals = {}
-                if name and not partner.name:
+                if name:
                     vals['name'] = name
                 if phone and not partner.phone:
                     vals['phone'] = phone
                 if vals:
                     partner.sudo().write(vals)
 
+            # Document type + number
             if doc_type and doc_number:
                 doc_vals = {'vat': doc_number}
                 xmlid = TYPE_MAP.get(doc_type)
@@ -642,6 +649,33 @@ class LoyaltyAPI(http.Controller):
                     except Exception:
                         pass
                 partner.sudo().write(doc_vals)
+
+            # Birthday
+            if birth_date:
+                try:
+                    _date.fromisoformat(birth_date)
+                    if not partner.loyalty_birth_date:
+                        partner.sudo().write({'loyalty_birth_date': birth_date})
+                except ValueError:
+                    pass
+
+            # Address
+            addr_vals = {}
+            if street:       addr_vals['street']  = street
+            if street2:      addr_vals['street2'] = street2
+            if city:         addr_vals['city']    = city
+            if country_code:
+                country = request.env['res.country'].sudo().search(
+                    [('code', '=', country_code)], limit=1)
+                if country:
+                    addr_vals['country_id'] = country.id
+                    if state_code:
+                        state = request.env['res.country.state'].sudo().search(
+                            [('country_id', '=', country.id), ('code', '=', state_code)], limit=1)
+                        if state:
+                            addr_vals['state_id'] = state.id
+            if addr_vals:
+                partner.sudo().write(addr_vals)
 
             # Enroll partner in loyalty program if not already enrolled
             card         = None
