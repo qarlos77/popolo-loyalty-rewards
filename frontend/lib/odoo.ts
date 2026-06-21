@@ -54,6 +54,8 @@ export const odoo = {
     email: string
     phone?: string
     birth_date?: string
+    doc_type?: string
+    doc_number?: string
   }) =>
     apiFetch<{
       success: boolean

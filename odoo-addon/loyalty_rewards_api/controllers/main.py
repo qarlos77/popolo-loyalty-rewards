@@ -219,7 +219,7 @@ class LoyaltyAPI(http.Controller):
                 'vat': partner.vat,
                 'image_url': f'/web/image/res.partner/{partner.id}/image_128',
             },
-            'total_points': sum(c.points for c in cards),
+            'total_points': sum(c.points for c in cards if c.program_id.program_type == 'loyalty'),
             'cards': [_card_to_dict(c) for c in cards],
             'birthday': _birthday_info(partner, window),
         })
@@ -233,7 +233,7 @@ class LoyaltyAPI(http.Controller):
 
         cards = request.env['loyalty.card'].sudo().search([('partner_id', '=', partner.id)])
         return _json_response({
-            'total_points': sum(c.points for c in cards),
+            'total_points': sum(c.points for c in cards if c.program_id.program_type == 'loyalty'),
             'cards': [{'id': c.id, 'points': c.points, 'program_id': c.program_id.id} for c in cards],
             'timestamp': datetime.now().isoformat(),
         })
@@ -406,7 +406,7 @@ class LoyaltyAPI(http.Controller):
                 'birth_date': partner.loyalty_birth_date.isoformat() if partner.loyalty_birth_date else None,
             },
             'cards': [_card_to_dict(c) for c in cards],
-            'total_points': sum(c.points for c in cards),
+            'total_points': sum(c.points for c in cards if c.program_id.program_type == 'loyalty'),
             'birthday': _birthday_info(partner, window),
         })
 
@@ -863,12 +863,28 @@ class LoyaltyAPI(http.Controller):
         email          = str(body.get('email', '')).strip().lower()
         phone          = str(body.get('phone', '')).strip()
         birth_date_raw = str(body.get('birth_date', '')).strip()
+        doc_type       = str(body.get('doc_type', '')).strip()
+        doc_number     = str(body.get('doc_number', '')).strip().upper()
 
         if not name or not email:
             return _json_response({'error': 'El nombre y el correo son obligatorios'}, 400)
 
         if not re.match(r'^[^@\s]+@[^@\s]+\.[^@\s]+$', email):
             return _json_response({'error': 'Correo electrónico inválido'}, 400)
+
+        if not doc_type or not doc_number:
+            return _json_response({'error': 'El tipo y número de documento son obligatorios'}, 400)
+
+        DOC_TYPE_XMLIDS = {
+            'DNI':       'l10n_pe.it_DNI',
+            'CE':        'l10n_latam_base.it_fid',
+            'Pasaporte': 'l10n_latam_base.it_pass',
+        }
+        if doc_type not in DOC_TYPE_XMLIDS:
+            return _json_response({'error': 'Tipo de documento inválido'}, 400)
+
+        doc_type_record = request.env.ref(DOC_TYPE_XMLIDS[doc_type], raise_if_not_found=False)
+        doc_type_id = doc_type_record.id if doc_type_record else False
 
         birth_date_val = False
         if birth_date_raw:
@@ -891,18 +907,27 @@ class LoyaltyAPI(http.Controller):
 
             full_name = f'{name} {last_name}'.strip()
             if not partner:
-                vals = {'name': full_name, 'email': email, 'phone': phone or False, 'customer_rank': 1}
+                vals = {
+                    'name':          full_name,
+                    'email':         email,
+                    'phone':         phone or False,
+                    'customer_rank': 1,
+                    'vat':           doc_number,
+                }
+                if doc_type_id:
+                    vals['l10n_latam_identification_type_id'] = doc_type_id
                 if birth_date_val:
                     vals['loyalty_birth_date'] = birth_date_val
                 partner = request.env['res.partner'].sudo().create(vals)
             else:
-                update = {}
+                update = {'vat': doc_number}
+                if doc_type_id:
+                    update['l10n_latam_identification_type_id'] = doc_type_id
                 if birth_date_val and not partner.loyalty_birth_date:
                     update['loyalty_birth_date'] = birth_date_val
                 if full_name:
                     update['name'] = full_name
-                if update:
-                    partner.sudo().write(update)
+                partner.sudo().write(update)
 
             icp = request.env['ir.config_parameter'].sudo()
             self._create_wc_customer(
