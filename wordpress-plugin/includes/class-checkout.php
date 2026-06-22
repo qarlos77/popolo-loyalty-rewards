@@ -42,6 +42,9 @@ class Popolo_Checkout {
         // Cart page points banner — prepend before the WC Blocks cart block
         add_filter('render_block', [$this, 'render_cart_points_banner'], 10, 2);
 
+        // Welcome notice after registration
+        add_action('template_redirect', [$this, 'maybe_show_welcome_notice']);
+
         // Scripts & styles
         add_action('wp_enqueue_scripts', [$this, 'enqueue_scripts']);
 
@@ -367,8 +370,29 @@ class Popolo_Checkout {
             'country_code' => $address['country_code'] ?? 'PE',
         ];
 
-        $client = new Popolo_API_Client($odoo_url, $api_key);
-        $client->register_customer($payload);
+        $client   = new Popolo_API_Client($odoo_url, $api_key);
+        $response = $client->register_customer($payload);
+
+        $welcome_pts = intval($response['welcome_points'] ?? 0);
+        if ($welcome_pts > 0) {
+            $msg = '¡Felicidades! Gracias por registrarte a <strong>Popolo Rewards</strong>.'
+                 . ' ¡Has ganado <strong>' . number_format($welcome_pts) . ' puntos</strong>!'
+                 . ' Consulta tus puntos y premios en'
+                 . ' <a href="https://rewards.popolopizza.com" target="_blank">rewards.popolopizza.com</a>';
+            set_transient('popolo_welcome_notice_' . $customer_id, $msg, 300);
+        }
+    }
+
+    /* ── Welcome notice after registration ───────────────────────────── */
+
+    public function maybe_show_welcome_notice(): void {
+        if (!is_user_logged_in()) return;
+        $user_id = get_current_user_id();
+        $key     = 'popolo_welcome_notice_' . $user_id;
+        $msg     = get_transient($key);
+        if (!$msg) return;
+        delete_transient($key);
+        wc_add_notice($msg, 'success');
     }
 
     /* ── Address field adjustments ────────────────────────────────────── */
