@@ -477,7 +477,7 @@ class Popolo_Checkout {
                 true
             );
 
-            $cart_total    = ($on_checkout && WC()->cart) ? floatval(WC()->cart->get_total('edit')) : 0;
+            $cart_total    = ($on_checkout && WC()->cart) ? floatval(WC()->cart->get_subtotal()) : 0;
             $current_email = $logged_in ? wp_get_current_user()->user_email : '';
 
             wp_localize_script('popolo-checkout', 'popoloLoyalty', [

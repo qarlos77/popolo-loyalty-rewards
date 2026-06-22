@@ -245,7 +245,9 @@
             var totals = cartStore.getCartTotals ? cartStore.getCartTotals() : null;
             if (!totals) return false;
 
-            var subtotal = parseInt(totals.total_items || 0, 10) / Math.pow(10, parseInt(totals.currency_minor_unit || 2, 10));
+            // total_items = product subtotal only (excludes shipping, fees, taxes)
+            var unit     = Math.pow(10, parseInt(totals.currency_minor_unit || 2, 10));
+            var subtotal = parseInt(totals.total_items || 0, 10) / unit;
             if (!subtotal) return false;
 
             var points = Math.floor(subtotal * ratio);
