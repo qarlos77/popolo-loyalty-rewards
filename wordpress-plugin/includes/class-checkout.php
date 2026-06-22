@@ -510,6 +510,23 @@ class Popolo_Checkout {
             ]);
         }
 
+        if ($logged_in) {
+            $user = wp_get_current_user();
+            $first_name = get_user_meta($user->ID, 'billing_first_name', true) ?: $user->display_name;
+            wp_enqueue_script(
+                'popolo-loyalty-header',
+                POPOLO_LOYALTY_PLUGIN_URL . 'includes/loyalty-header.js',
+                ['jquery'],
+                POPOLO_LOYALTY_VERSION,
+                true
+            );
+            wp_localize_script('popolo-loyalty-header', 'popoloBadge', [
+                'ajaxurl' => admin_url('admin-ajax.php'),
+                'nonce'   => wp_create_nonce('popolo_get_points'),
+                'email'   => $user->user_email,
+                'name'    => $first_name,
+            ]);
+        }
     }
 
     /* ── AJAX ─────────────────────────────────────────────────────────── */

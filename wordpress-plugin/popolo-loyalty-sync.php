@@ -3,7 +3,7 @@
  * Plugin Name: Popolo Loyalty Sync
  * Plugin URI:  https://popolopizza.com
  * Description: Sincroniza puntos de lealtad con Odoo cuando un pedido de WooCommerce alcanza el estado configurado.
- * Version:     1.3.7
+ * Version:     1.3.8
  * Author:      PopoloPizza
  * Text Domain: popolo-loyalty-sync
  * Requires Plugins: woocommerce
@@ -13,7 +13,7 @@
 
 defined('ABSPATH') || exit;
 
-define('POPOLO_LOYALTY_VERSION', '1.5.9');
+define('POPOLO_LOYALTY_VERSION', '1.6.0');
 define('POPOLO_LOYALTY_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('POPOLO_LOYALTY_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('POPOLO_LOYALTY_TABLE',      $GLOBALS['wpdb']->prefix . 'popolo_loyalty_log');
