@@ -14,11 +14,11 @@
 
         var name = (popoloBadge.name || '').split(' ')[0];
         var ptsText = (pts !== null)
-            ? ', tienes <strong>' + fmt(pts) + ' pts</strong> acumulados'
+            ? ', tienes <strong>' + fmt(pts) + '&nbsp;pts</strong>&nbsp;acumulados'
             : '';
 
         var $el = $('<span id="popolo-topbar-greeting"></span>')
-            .css({ 'font-size': '11px', 'color': '#555', 'line-height': '1' })
+            .css({ 'font-size': '13px', 'color': '#555', 'line-height': '1' })
             .html('Bienvenido(a) <strong>' + $('<span>').text(name).html() + '</strong>' + ptsText);
 
         $slot.empty().append($el);
