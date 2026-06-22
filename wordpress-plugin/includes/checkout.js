@@ -191,9 +191,6 @@
                 var coStore = wp.data.select('wc/store/checkout');
                 var shouldCreate = coStore && coStore.getShouldCreateAccount ? coStore.getShouldCreateAccount() : false;
 
-                // Only act if something actually needs to change
-                if (labelsClean && shouldCreate === lastShouldCreate) return;
-
                 observer.disconnect();
 
                 if (!labelsClean) {
@@ -201,10 +198,10 @@
                     labelsClean = true;
                 }
 
-                if (shouldCreate !== lastShouldCreate) {
-                    setPoloFieldsVisible(shouldCreate);
-                    lastShouldCreate = shouldCreate;
-                }
+                // Always enforce visibility — React re-renders create new DOM elements
+                // that lose the inline style, so we can't skip based on lastShouldCreate.
+                setPoloFieldsVisible(shouldCreate);
+                lastShouldCreate = shouldCreate;
 
                 observer.observe(document.body, { childList: true, subtree: true });
             });

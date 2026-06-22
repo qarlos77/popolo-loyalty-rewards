@@ -269,6 +269,12 @@ class Popolo_Checkout {
     }
 
     public function validate_register_doc_fields(string $username, string $email, WP_Error $errors): void {
+        // Block checkout creates accounts via REST API — $_POST is empty in that context.
+        // Additional fields are validated via their own validate_callback instead.
+        if (defined('REST_REQUEST') && REST_REQUEST) {
+            return;
+        }
+
         $first_name = sanitize_text_field($_POST['reg_first_name'] ?? '');
         $last_name  = sanitize_text_field($_POST['reg_last_name']  ?? '');
         $phone      = sanitize_text_field($_POST['reg_phone']      ?? '');
