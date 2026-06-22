@@ -48,9 +48,6 @@ class Popolo_Checkout {
         // Scripts & styles
         add_action('wp_enqueue_scripts', [$this, 'enqueue_scripts']);
 
-        // Global points badge in footer (logged-in users, all pages)
-        add_action('wp_footer', [$this, 'render_points_badge']);
-
         // AJAX
         add_action('wp_ajax_popolo_get_points',        [$this, 'ajax_get_points']);
         add_action('wp_ajax_nopriv_popolo_get_points', [$this, 'ajax_get_points']);
@@ -513,41 +510,6 @@ class Popolo_Checkout {
             ]);
         }
 
-        if ($logged_in) {
-            wp_enqueue_script(
-                'popolo-loyalty-header',
-                POPOLO_LOYALTY_PLUGIN_URL . 'includes/loyalty-header.js',
-                ['jquery'],
-                POPOLO_LOYALTY_VERSION,
-                true
-            );
-            wp_enqueue_style(
-                'popolo-loyalty-frontend',
-                POPOLO_LOYALTY_PLUGIN_URL . 'includes/loyalty-frontend.css',
-                [],
-                POPOLO_LOYALTY_VERSION
-            );
-            wp_localize_script('popolo-loyalty-header', 'popoloBadge', [
-                'ajaxurl' => admin_url('admin-ajax.php'),
-                'nonce'   => wp_create_nonce('popolo_get_points'),
-                'email'   => wp_get_current_user()->user_email,
-            ]);
-        }
-    }
-
-    /* ── Badge ────────────────────────────────────────────────────────── */
-
-    public function render_points_badge(): void {
-        if (!is_user_logged_in() || !get_option('popolo_loyalty_enabled', '1')) {
-            return;
-        }
-        ?>
-        <div id="popolo-points-badge" style="display:none;" role="status" aria-live="polite">
-            <span class="popolo-badge-icon">🎁</span>
-            <span id="popolo-badge-pts">…</span>
-            <span class="popolo-badge-label">pts</span>
-        </div>
-        <?php
     }
 
     /* ── AJAX ─────────────────────────────────────────────────────────── */
