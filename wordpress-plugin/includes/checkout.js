@@ -115,6 +115,13 @@
         });
     }
 
+    function patchLoginPrompt() {
+        var link = document.querySelector('a.wc-block-checkout__login-prompt');
+        if (link && link.textContent.trim() !== '¿Ya tienes cuenta? Inicia sesión') {
+            link.textContent = '¿Ya tienes cuenta? Inicia sesión';
+        }
+    }
+
     function patchCreateAccountLabel() {
         var spans = document.querySelectorAll('.wc-block-components-checkbox__label');
         for (var i = 0; i < spans.length; i++) {
@@ -209,6 +216,7 @@
                 }
 
                 patchCreateAccountLabel();
+                patchLoginPrompt();
 
                 // Always enforce visibility — React re-renders create new DOM elements
                 // that lose the inline style, so we can't skip based on lastShouldCreate.
@@ -220,8 +228,9 @@
             observer.observe(document.body, { childList: true, subtree: true });
         }
 
-        // Patch create-account label text after React finishes initial render
+        // Patch create-account label and login prompt after React finishes initial render
         setTimeout(patchCreateAccountLabel, 800);
+        setTimeout(patchLoginPrompt, 800);
 
         // Auto-load for logged-in users
         if (popoloLoyalty.userLoggedIn && popoloLoyalty.currentEmail) {
