@@ -19,7 +19,7 @@
 
         var $el = $('<span id="popolo-topbar-greeting"></span>')
             .css({ 'font-size': '13px', 'color': '#555', 'line-height': '1' })
-            .html('Bienvenido(a) <strong>' + $('<span>').text(name).html() + '</strong>' + ptsText);
+            .html('Bienvenido(a)&nbsp;<strong>' + $('<span>').text(name).html() + '</strong>' + ptsText);
 
         $slot.empty().append($el);
     }
