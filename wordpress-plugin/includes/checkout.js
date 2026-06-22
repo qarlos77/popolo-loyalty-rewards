@@ -115,6 +115,16 @@
         });
     }
 
+    function patchCreateAccountLabel() {
+        var spans = document.querySelectorAll('.wc-block-components-checkbox__label');
+        for (var i = 0; i < spans.length; i++) {
+            var t = spans[i].textContent;
+            if (t.indexOf('Crear una cuenta con') !== -1 || t.indexOf('Create an account with') !== -1) {
+                spans[i].textContent = 'Regístrate y únete a Popolo Rewards para ganar cupones y beneficios';
+            }
+        }
+    }
+
     function setPoloFieldsVisible(visible) {
         var wrappers = findPoloFieldWrappers();
         wrappers.forEach(function (w) {
@@ -198,6 +208,8 @@
                     labelsClean = true;
                 }
 
+                patchCreateAccountLabel();
+
                 // Always enforce visibility — React re-renders create new DOM elements
                 // that lose the inline style, so we can't skip based on lastShouldCreate.
                 setPoloFieldsVisible(shouldCreate);
@@ -208,11 +220,59 @@
             observer.observe(document.body, { childList: true, subtree: true });
         }
 
+        // Patch create-account label text after React finishes initial render
+        setTimeout(patchCreateAccountLabel, 800);
+
         // Auto-load for logged-in users
         if (popoloLoyalty.userLoggedIn && popoloLoyalty.currentEmail) {
             lastEmail = popoloLoyalty.currentEmail;
             lookupPoints(popoloLoyalty.currentEmail);
         }
+    }
+
+    /* ── Cart page integration ───────────────────────────────────────────── */
+
+    function initCartPage() {
+        var $banner = $('.popolo-cart-rewards-banner');
+        if (!$banner.length) return;
+
+        var ratio = parseFloat($banner.data('ratio') || 0);
+        if (!ratio) return;
+
+        function updateBannerPoints() {
+            var cartStore = wp.data && wp.data.select('wc/store/cart');
+            if (!cartStore) return false;
+            var totals = cartStore.getCartTotals ? cartStore.getCartTotals() : null;
+            if (!totals) return false;
+
+            var subtotal = parseInt(totals.total_items || 0, 10) / Math.pow(10, parseInt(totals.currency_minor_unit || 2, 10));
+            if (!subtotal) return false;
+
+            var points = Math.floor(subtotal * ratio);
+            if (points > 0) {
+                $banner.find('.popolo-cart-points-placeholder').html(
+                    '<strong>' + points.toLocaleString('es-PE') + ' puntos</strong>'
+                );
+                $banner.html(
+                    $banner.html().replace(
+                        '¡Con esta compra puedes acumular',
+                        'Con esta compra acumularías'
+                    ).replace(
+                        ' y bonos de bienvenida!',
+                        ' ¡más bonos de bienvenida!'
+                    )
+                );
+            }
+            return true;
+        }
+
+        // Try immediately, then retry until the store has data
+        var attempts = 0;
+        var interval = setInterval(function () {
+            if (updateBannerPoints() || ++attempts >= 20) {
+                clearInterval(interval);
+            }
+        }, 300);
     }
 
     /* ── Classic checkout integration ────────────────────────────────────── */
@@ -261,7 +321,9 @@
     $(function () {
         isBlockCO = !!document.querySelector('.wp-block-woocommerce-checkout');
 
-        if (isBlockCO) {
+        if (document.querySelector('.wp-block-woocommerce-cart')) {
+            initCartPage();
+        } else if (isBlockCO) {
             initBlockCheckout();
         } else {
             initClassicCheckout();

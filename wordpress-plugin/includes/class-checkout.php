@@ -39,6 +39,9 @@ class Popolo_Checkout {
         add_filter('woocommerce_billing_fields',            [$this, 'rename_city_to_distrito']);
         add_filter('woocommerce_shipping_fields',           [$this, 'rename_city_to_distrito']);
 
+        // Cart page points banner — prepend before the WC Blocks cart block
+        add_filter('render_block', [$this, 'render_cart_points_banner'], 10, 2);
+
         // Scripts & styles
         add_action('wp_enqueue_scripts', [$this, 'enqueue_scripts']);
 
@@ -268,6 +271,26 @@ class Popolo_Checkout {
         <?php
     }
 
+    public function render_cart_points_banner(string $block_content, array $block): string {
+        if ($block['blockName'] !== 'woocommerce/cart') return $block_content;
+        if (is_user_logged_in()) return $block_content;
+        if (!WC()->cart || WC()->cart->is_empty()) return $block_content;
+
+        $ratio = floatval(get_option('popolo_loyalty_default_ratio', 0.1));
+
+        // PHP can't reliably access cart totals at render_block time (calculate_totals hasn't run).
+        // JS will update the points number once the WC Blocks store has the real cart total.
+        $banner = '<div class="woocommerce-info popolo-cart-rewards-banner"'
+            . ' data-ratio="' . esc_attr($ratio) . '">'
+            . '¡Con esta compra puedes acumular <strong class="popolo-cart-points-placeholder">puntos de lealtad</strong>'
+            . ' y bonos de bienvenida!'
+            . ' <a href="' . esc_url(wc_get_checkout_url()) . '"><strong>Regístrate en Popolo Rewards</strong></a>'
+            . ' en la siguiente pantalla.'
+            . '</div>';
+
+        return $banner . $block_content;
+    }
+
     public function validate_register_doc_fields(string $username, string $email, WP_Error $errors): void {
         // Block checkout creates accounts via REST API — $_POST is empty in that context.
         // Additional fields are validated via their own validate_callback instead.
@@ -426,6 +449,7 @@ class Popolo_Checkout {
         $logged_in     = is_user_logged_in();
         $on_checkout   = is_checkout() && !is_order_received_page();
         $on_order_rcvd = is_order_received_page();
+        $on_cart       = is_cart();
 
         if ($on_checkout || is_account_page() || !is_user_logged_in()) {
             wp_enqueue_script(
@@ -444,7 +468,7 @@ class Popolo_Checkout {
             );
         }
 
-        if ($on_checkout || $on_order_rcvd) {
+        if ($on_checkout || $on_order_rcvd || $on_cart) {
             wp_enqueue_script(
                 'popolo-checkout',
                 POPOLO_LOYALTY_PLUGIN_URL . 'includes/checkout.js',
