@@ -127,10 +127,10 @@
             '.popolo-step-collapsed > .wc-block-components-checkout-step__heading-container { display: none !important; }',
             '.popolo-step-collapsed > .wc-block-components-checkout-step__content           { display: none !important; }',
             '.popolo-step-summary { padding: 4px 0 12px; font-size: 14px; line-height: 1.8; color: #333; }',
-            '.popolo-step-summary .popolo-edit-btn { display: inline-block; margin-top: 6px; padding: 5px 14px;',
-            '  font-size: 12px; background: #fff; border: 1px solid #ccc; border-radius: 4px;',
-            '  cursor: pointer; color: #555; }',
-            '.popolo-step-summary .popolo-edit-btn:hover { border-color: #999; color: #111; }'
+            '.popolo-step-summary .popolo-edit-btn { display: inline; margin-top: 4px; padding: 0;',
+            '  font-size: 14px; background: none; border: none; cursor: pointer;',
+            '  color: #555; text-decoration: underline; }',
+            '.popolo-step-summary .popolo-edit-btn:hover { color: #111; }'
         ].join('\n');
         document.head.appendChild(style);
     }
@@ -152,7 +152,7 @@
             summary.id = summaryId;
             summary.className = 'popolo-step-summary';
             summary.innerHTML = cfg.lines.join('<br>') +
-                '<br><button class="popolo-edit-btn" type="button">✏ Editar</button>';
+                '<br><button class="popolo-edit-btn" type="button">Editar</button>';
             step.parentNode.insertBefore(summary, step);
 
             summary.querySelector('.popolo-edit-btn').addEventListener('click', function () {

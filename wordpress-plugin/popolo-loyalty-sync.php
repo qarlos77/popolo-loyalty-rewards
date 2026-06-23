@@ -13,7 +13,7 @@
 
 defined('ABSPATH') || exit;
 
-define('POPOLO_LOYALTY_VERSION', '1.6.4');
+define('POPOLO_LOYALTY_VERSION', '1.6.5');
 define('POPOLO_LOYALTY_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('POPOLO_LOYALTY_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('POPOLO_LOYALTY_TABLE',      $GLOBALS['wpdb']->prefix . 'popolo_loyalty_log');
