@@ -204,6 +204,9 @@ class Popolo_Checkout {
         if ($doc_number) update_user_meta($customer_id, 'billing_doc_number', $doc_number);
         if ($birth_date) update_user_meta($customer_id, 'billing_birth_date', $birth_date);
 
+        // Always sync address so next checkout is pre-filled
+        $this->sync_address_to_user($customer_id, $order);
+
         // Only sync to Odoo for newly registered customers
         $is_new = get_user_meta($customer_id, '_popolo_new_registration', true);
         if (!$is_new) {
@@ -221,6 +224,23 @@ class Popolo_Checkout {
         ];
 
         $this->do_sync_to_odoo($customer_id, $doc_type, $doc_number, $birth_date, $address);
+    }
+
+    /* ── Address sync ────────────────────────────────────────────────── */
+
+    private function sync_address_to_user(int $user_id, WC_Order $order): void {
+        foreach (['first_name', 'last_name', 'address_1', 'address_2', 'city', 'state', 'postcode', 'country', 'email', 'phone'] as $f) {
+            $v = $order->{"get_billing_{$f}"}();
+            if ($v !== '' && $v !== null) update_user_meta($user_id, "billing_{$f}", $v);
+        }
+        foreach (['first_name', 'last_name', 'address_1', 'address_2', 'city', 'state', 'postcode', 'country'] as $f) {
+            $v = $order->{"get_shipping_{$f}"}();
+            if ($v !== '' && $v !== null) update_user_meta($user_id, "shipping_{$f}", $v);
+        }
+        if (method_exists($order, 'get_shipping_phone')) {
+            $v = $order->get_shipping_phone();
+            if ($v) update_user_meta($user_id, 'shipping_phone', $v);
+        }
     }
 
     /* ── My-Account registration fields ───────────────────────────────── */
