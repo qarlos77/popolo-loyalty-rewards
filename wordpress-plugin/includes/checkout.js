@@ -176,9 +176,9 @@
             if (email || firstName || ++attempts >= 25) {
                 clearInterval(check);
 
-                if (email) {
-                    summaryConfig['contact-fields'] = { lines: ['<strong>Email:</strong> ' + esc(email)], expanded: false };
-                }
+                // Contact step: logged-in user — hide entirely, no summary needed
+                var contactStep = document.getElementById('contact-fields');
+                if (contactStep) contactStep.classList.add('popolo-step-collapsed');
 
                 var lastName = (document.querySelector('#shipping-last_name') || {}).value || '';
                 var address  = (document.querySelector('#shipping-address_1') || {}).value || '';
@@ -193,10 +193,16 @@
                     summaryConfig['shipping-fields'] = { lines: lines, expanded: false };
                 }
 
-                // Apply and watch for React re-renders removing our class
+                // Apply summary for shipping step
                 Object.keys(summaryConfig).forEach(applyCollapse);
 
                 var obs = new MutationObserver(function () {
+                    // Keep contact-fields hidden
+                    var cs = document.getElementById('contact-fields');
+                    if (cs && !cs.classList.contains('popolo-step-collapsed')) {
+                        cs.classList.add('popolo-step-collapsed');
+                    }
+                    // Keep shipping summary collapsed
                     Object.keys(summaryConfig).forEach(function (stepId) {
                         var cfg = summaryConfig[stepId];
                         if (cfg && !cfg.expanded) {
