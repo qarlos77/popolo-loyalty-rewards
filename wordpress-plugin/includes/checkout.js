@@ -124,7 +124,8 @@
         var style = document.createElement('style');
         style.id = 'popolo-summary-styles';
         style.textContent = [
-            '.popolo-collapsed-content { display: none !important; }',
+            '.popolo-step-collapsed > .wc-block-components-checkout-step__heading-container { display: none !important; }',
+            '.popolo-step-collapsed > .wc-block-components-checkout-step__content           { display: none !important; }',
             '.popolo-step-summary { padding: 4px 0 12px; font-size: 14px; line-height: 1.8; color: #333; }',
             '.popolo-step-summary .popolo-edit-btn { display: inline-block; margin-top: 6px; padding: 5px 14px;',
             '  font-size: 12px; background: #fff; border: 1px solid #ccc; border-radius: 4px;',
@@ -140,11 +141,9 @@
 
         var step = document.getElementById(stepId);
         if (!step) return;
-        var content = step.querySelector('.wc-block-components-checkout-step__content');
-        if (!content) return;
 
-        // CSS class hides the content (survives React re-render of the content itself)
-        content.classList.add('popolo-collapsed-content');
+        // Hide the entire step (heading + content) via class on the step itself
+        step.classList.add('popolo-step-collapsed');
 
         // Place summary immediately before the step container (outside React's subtree)
         var summaryId = 'popolo-summary-' + stepId;
@@ -158,7 +157,7 @@
 
             summary.querySelector('.popolo-edit-btn').addEventListener('click', function () {
                 cfg.expanded = true;
-                content.classList.remove('popolo-collapsed-content');
+                step.classList.remove('popolo-step-collapsed');
                 summary.remove();
             });
         }
@@ -201,14 +200,14 @@
                     Object.keys(summaryConfig).forEach(function (stepId) {
                         var cfg = summaryConfig[stepId];
                         if (cfg && !cfg.expanded) {
-                            var content = document.querySelector('#' + stepId + ' .wc-block-components-checkout-step__content');
-                            if (content && !content.classList.contains('popolo-collapsed-content')) {
-                                content.classList.add('popolo-collapsed-content');
+                            var step = document.getElementById(stepId);
+                            if (step && !step.classList.contains('popolo-step-collapsed')) {
+                                step.classList.add('popolo-step-collapsed');
                             }
                         }
                     });
                 });
-                obs.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'style'] });
+                obs.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
             }
         }, 300);
     }
