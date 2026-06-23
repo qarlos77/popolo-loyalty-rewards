@@ -115,6 +115,104 @@
         });
     }
 
+    /* ── Logged-in checkout summary ─────────────────────────────────────── */
+
+    var summaryConfig = {}; // stepId → { lines, expanded }
+
+    function injectSummaryStyles() {
+        if (document.getElementById('popolo-summary-styles')) return;
+        var style = document.createElement('style');
+        style.id = 'popolo-summary-styles';
+        style.textContent = [
+            '.popolo-collapsed-content { display: none !important; }',
+            '.popolo-step-summary { padding: 4px 0 12px; font-size: 14px; line-height: 1.8; color: #333; }',
+            '.popolo-step-summary .popolo-edit-btn { display: inline-block; margin-top: 6px; padding: 5px 14px;',
+            '  font-size: 12px; background: #fff; border: 1px solid #ccc; border-radius: 4px;',
+            '  cursor: pointer; color: #555; }',
+            '.popolo-step-summary .popolo-edit-btn:hover { border-color: #999; color: #111; }'
+        ].join('\n');
+        document.head.appendChild(style);
+    }
+
+    function applyCollapse(stepId) {
+        var cfg = summaryConfig[stepId];
+        if (!cfg || cfg.expanded) return;
+
+        var step = document.getElementById(stepId);
+        if (!step) return;
+        var content = step.querySelector('.wc-block-components-checkout-step__content');
+        if (!content) return;
+
+        // CSS class hides the content (survives React re-render of the content itself)
+        content.classList.add('popolo-collapsed-content');
+
+        // Place summary immediately before the step container (outside React's subtree)
+        var summaryId = 'popolo-summary-' + stepId;
+        if (!document.getElementById(summaryId)) {
+            var summary = document.createElement('div');
+            summary.id = summaryId;
+            summary.className = 'popolo-step-summary';
+            summary.innerHTML = cfg.lines.join('<br>') +
+                '<br><button class="popolo-edit-btn" type="button">✏ Editar</button>';
+            step.parentNode.insertBefore(summary, step);
+
+            summary.querySelector('.popolo-edit-btn').addEventListener('click', function () {
+                cfg.expanded = true;
+                content.classList.remove('popolo-collapsed-content');
+                summary.remove();
+            });
+        }
+    }
+
+    function initLoggedInSummary() {
+        if (!popoloLoyalty.userLoggedIn) return;
+
+        injectSummaryStyles();
+
+        var attempts = 0;
+        var check = setInterval(function () {
+            var email     = (document.querySelector('#email') || {}).value || '';
+            var firstName = (document.querySelector('#shipping-first_name') || {}).value || '';
+
+            if (email || firstName || ++attempts >= 25) {
+                clearInterval(check);
+
+                if (email) {
+                    summaryConfig['contact-fields'] = { lines: ['<strong>Email:</strong> ' + esc(email)], expanded: false };
+                }
+
+                var lastName = (document.querySelector('#shipping-last_name') || {}).value || '';
+                var address  = (document.querySelector('#shipping-address_1') || {}).value || '';
+                var city     = (document.querySelector('#shipping-city') || {}).value || '';
+                var phone    = (document.querySelector('#shipping-phone') || {}).value || '';
+
+                if (firstName && address) {
+                    var lines = ['<strong>' + esc((firstName + ' ' + lastName).trim()) + '</strong>'];
+                    if (address) lines.push(esc(address));
+                    if (city)    lines.push(esc(city));
+                    if (phone)   lines.push('☎ ' + esc(phone));
+                    summaryConfig['shipping-fields'] = { lines: lines, expanded: false };
+                }
+
+                // Apply and watch for React re-renders removing our class
+                Object.keys(summaryConfig).forEach(applyCollapse);
+
+                var obs = new MutationObserver(function () {
+                    Object.keys(summaryConfig).forEach(function (stepId) {
+                        var cfg = summaryConfig[stepId];
+                        if (cfg && !cfg.expanded) {
+                            var content = document.querySelector('#' + stepId + ' .wc-block-components-checkout-step__content');
+                            if (content && !content.classList.contains('popolo-collapsed-content')) {
+                                content.classList.add('popolo-collapsed-content');
+                            }
+                        }
+                    });
+                });
+                obs.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'style'] });
+            }
+        }, 300);
+    }
+
     function patchLoginPrompt() {
         var link = document.querySelector('a.wc-block-checkout__login-prompt');
         if (link && link.textContent.trim() !== '¿Ya tienes cuenta? Inicia sesión') {
@@ -231,6 +329,9 @@
         // Patch create-account label and login prompt after React finishes initial render
         setTimeout(patchCreateAccountLabel, 800);
         setTimeout(patchLoginPrompt, 800);
+
+        // Pre-fill summary for logged-in users
+        initLoggedInSummary();
 
         // Auto-load for logged-in users
         if (popoloLoyalty.userLoggedIn && popoloLoyalty.currentEmail) {
