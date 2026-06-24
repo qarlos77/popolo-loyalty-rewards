@@ -90,7 +90,7 @@ class ResPartner(models.Model):
         self.env['loyalty.card'].with_context(action_no_send_mail=True).sudo().create({
             'program_id': loyalty_program.id,
             'partner_id': self.id,
-            'points': 0,
+            'points': int(self.env['ir.config_parameter'].sudo().get_param('loyalty_rewards_api.welcome_points', 0) or 0),
         })
         return False
 
@@ -179,7 +179,7 @@ class ResPartner(models.Model):
         card = self.env['loyalty.card'].with_context(action_no_send_mail=True).sudo().create({
             'program_id': loyalty_program.id,
             'partner_id': partner_id,
-            'points': 0,
+            'points': int(self.env['ir.config_parameter'].sudo().get_param('loyalty_rewards_api.welcome_points', 0) or 0),
         })
 
         return {'success': True, 'card_id': card.id, 'program_name': loyalty_program.name}
