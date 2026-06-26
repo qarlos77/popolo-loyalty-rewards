@@ -27,6 +27,18 @@ export const odoo = {
       { method: 'POST', body: JSON.stringify({ identifier, device_hint: deviceHint }) },
     ),
 
+  otpRequest: (email: string) =>
+    apiFetch<{ ok: boolean; resend_wait?: number }>(
+      '/otp/request',
+      { method: 'POST', body: JSON.stringify({ email }) },
+    ),
+
+  otpVerify: (email: string, code: string, deviceHint?: string) =>
+    apiFetch<{ token: string; expires_at: string; partner: import('./types').Partner }>(
+      '/otp/verify',
+      { method: 'POST', body: JSON.stringify({ email, code, device_hint: deviceHint }) },
+    ),
+
   me: (token: string) =>
     apiFetch<import('./types').MeResponse>('/me', {}, token),
 

@@ -15,6 +15,12 @@ services:
       - APP_NAME=${APP_NAME:-Rewards}
       - APP_LOGO_URL=${APP_LOGO_URL:-}
       - REWARDS_DOMAIN=${REWARDS_DOMAIN:-}
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_PORT=${SMTP_PORT}
+      - SMTP_USER=${SMTP_USER}
+      - SMTP_PASS=${SMTP_PASS}
+      - SMTP_FROM=${SMTP_FROM}
+      - SYNC_API_KEY=${SYNC_API_KEY}
     volumes:
       - config_data:/app/data
     healthcheck:
