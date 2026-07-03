@@ -45,6 +45,9 @@ class Popolo_Checkout {
         // Welcome notice after registration
         add_action('template_redirect', [$this, 'maybe_show_welcome_notice']);
 
+        // Global shop styles (thumbnail border-radius, etc.)
+        add_action('wp_head', [$this, 'output_shop_styles']);
+
         // Scripts & styles
         add_action('wp_enqueue_scripts', [$this, 'enqueue_scripts']);
 
@@ -480,6 +483,49 @@ class Popolo_Checkout {
         return $location;
     }
 
+    /* ── Global shop styles ───────────────────────────────────────────── */
+
+    public function output_shop_styles(): void {
+        echo '<style>
+.product-thumbnail img { border-radius: 24px; }
+a.rz-loop_button,
+ul.products li.product .product-thumbnail .rz-loop_button,
+ul.products li.product .product-inner .product-loop__buttons .rz-loop_button,
+ul.products li.product .product-summary .rz-loop_button { background-color: #ff4a4a !important; border-color: #ff4a4a !important; color: #fff !important; }
+a.rz-loop_button:hover,
+ul.products li.product .product-thumbnail .rz-loop_button:hover,
+ul.products li.product .product-inner .product-loop__buttons .rz-loop_button:hover,
+ul.products li.product .product-summary .rz-loop_button:hover { background-color: #e63c3c !important; border-color: #e63c3c !important; }
+@media (max-width: 991px) {
+  ul.products li.product .product-inner .product-loop__buttons .rz-loop_button,
+  ul.products li.product .product-summary .rz-loop_button { background-color: #ff4a4a !important; border-color: #ff4a4a !important; color: #fff !important; }
+  ul.products.mobile-show-atc li.product .product-summary .rz-loop_atc_button { background-color: #ff4a4a !important; border-color: #ff4a4a !important; color: #fff !important; }
+  /* App-like mobile: hide all loop buttons, whole card is tappable */
+  ul.products li.product .rz-loop_button,
+  ul.products li.product .product-loop__buttons,
+  ul.products.mobile-show-atc li.product .product-summary .rz-loop_atc_button { display: none !important; }
+  ul.products li.product .product-inner { cursor: pointer; }
+}
+</style>
+<script>
+(function() {
+  function initTappableCards() {
+    if (window.innerWidth > 991) return;
+    document.querySelectorAll("ul.products li.product .product-inner").forEach(function(inner) {
+      if (inner.dataset.tappable) return;
+      inner.dataset.tappable = "1";
+      inner.addEventListener("click", function(e) {
+        if (e.target.closest("a, button")) return;
+        var link = inner.querySelector("a.woocommerce-loop-product__link");
+        if (link) window.location.href = link.href;
+      });
+    });
+  }
+  document.addEventListener("DOMContentLoaded", initTappableCards);
+})();
+</script>' . "\n";
+    }
+
     /* ── Scripts & styles ─────────────────────────────────────────────── */
 
     public function enqueue_scripts(): void {
@@ -530,23 +576,26 @@ class Popolo_Checkout {
             ]);
         }
 
+        $badge_email = '';
+        $badge_name  = '';
         if ($logged_in) {
-            $user = wp_get_current_user();
-            $first_name = get_user_meta($user->ID, 'billing_first_name', true) ?: $user->display_name;
-            wp_enqueue_script(
-                'popolo-loyalty-header',
-                POPOLO_LOYALTY_PLUGIN_URL . 'includes/loyalty-header.js',
-                ['jquery'],
-                POPOLO_LOYALTY_VERSION,
-                true
-            );
-            wp_localize_script('popolo-loyalty-header', 'popoloBadge', [
-                'ajaxurl' => admin_url('admin-ajax.php'),
-                'nonce'   => wp_create_nonce('popolo_get_points'),
-                'email'   => $user->user_email,
-                'name'    => $first_name,
-            ]);
+            $user        = wp_get_current_user();
+            $badge_email = $user->user_email;
+            $badge_name  = get_user_meta($user->ID, 'billing_first_name', true) ?: $user->display_name;
         }
+        wp_enqueue_script(
+            'popolo-loyalty-header',
+            POPOLO_LOYALTY_PLUGIN_URL . 'includes/loyalty-header.js',
+            ['jquery'],
+            POPOLO_LOYALTY_VERSION,
+            true
+        );
+        wp_localize_script('popolo-loyalty-header', 'popoloBadge', [
+            'ajaxurl' => admin_url('admin-ajax.php'),
+            'nonce'   => wp_create_nonce('popolo_get_points'),
+            'email'   => $badge_email,
+            'name'    => $badge_name,
+        ]);
     }
 
     /* ── AJAX ─────────────────────────────────────────────────────────── */
