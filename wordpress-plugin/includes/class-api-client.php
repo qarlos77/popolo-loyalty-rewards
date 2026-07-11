@@ -71,6 +71,56 @@ class Popolo_API_Client {
     }
 
     /**
+     * Valida un código de cupón de lealtad contra Odoo en vivo (multi-sede:
+     * el cupón no existe en WC hasta que se usa — ver class-coupon-bridge.php).
+     */
+    public function validate_coupon(string $code): array {
+        $url = $this->base_url . '/api/loyalty/coupon-validate';
+
+        $response = wp_remote_post($url, [
+            'timeout' => 8,
+            'headers' => [
+                'Content-Type' => 'application/json',
+                'X-API-Key'    => $this->api_key,
+            ],
+            'body' => wp_json_encode(['code' => $code]),
+        ]);
+
+        if (is_wp_error($response)) {
+            return ['valid' => false, 'error' => $response->get_error_message()];
+        }
+
+        return json_decode(wp_remote_retrieve_body($response), true) ?? ['valid' => false];
+    }
+
+    /**
+     * Consume (marca como usado) un cupón de lealtad en Odoo. Atómico del
+     * lado Odoo: si dos sedes compiten por el mismo código, solo una gana.
+     */
+    public function consume_coupon(string $code, string $order_id, string $source): array {
+        $url = $this->base_url . '/api/loyalty/coupon-consume';
+
+        $response = wp_remote_post($url, [
+            'timeout' => 10,
+            'headers' => [
+                'Content-Type' => 'application/json',
+                'X-API-Key'    => $this->api_key,
+            ],
+            'body' => wp_json_encode([
+                'code'     => $code,
+                'order_id' => $order_id,
+                'source'   => $source,
+            ]),
+        ]);
+
+        if (is_wp_error($response)) {
+            return ['success' => false, 'error' => $response->get_error_message()];
+        }
+
+        return json_decode(wp_remote_retrieve_body($response), true) ?? ['success' => false];
+    }
+
+    /**
      * Register a WooCommerce customer in Odoo (creates/updates partner with doc info).
      */
     public function register_customer(array $payload): array {

@@ -95,7 +95,10 @@ class Popolo_Order_Sync {
             'phone'          => $phone,
             'order_total'    => (float) $order->get_total(),
             'currency'       => $order->get_currency(),
-            'source'         => 'woocommerce',
+            // Multisede: cada subtienda tiene su propia numeración de pedidos —
+            // sin un source distinto por sitio, el order_id 500 de Miraflores y
+            // el 500 de Chacarilla chocarían en el detector de duplicados de Odoo
+            'source'         => popolo_loyalty_source_slug(),
             'trigger_status' => $trigger_status,
             'customer_name'  => trim($order->get_billing_first_name() . ' ' . $order->get_billing_last_name()),
             'customer_email' => $order->get_billing_email(),

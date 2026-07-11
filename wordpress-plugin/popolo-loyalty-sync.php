@@ -3,7 +3,7 @@
  * Plugin Name: Popolo Loyalty Sync
  * Plugin URI:  https://popolopizza.com
  * Description: Sincroniza puntos de lealtad con Odoo cuando un pedido de WooCommerce alcanza el estado configurado.
- * Version:     1.3.9
+ * Version:     1.8.0
  * Author:      PopoloPizza
  * Text Domain: popolo-loyalty-sync
  * Requires Plugins: woocommerce
@@ -13,7 +13,7 @@
 
 defined('ABSPATH') || exit;
 
-define('POPOLO_LOYALTY_VERSION', '1.6.8');
+define('POPOLO_LOYALTY_VERSION', '1.8.1');
 define('POPOLO_LOYALTY_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('POPOLO_LOYALTY_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('POPOLO_LOYALTY_TABLE',      $GLOBALS['wpdb']->prefix . 'popolo_loyalty_log');
@@ -22,7 +22,22 @@ define('POPOLO_LOYALTY_TABLE',      $GLOBALS['wpdb']->prefix . 'popolo_loyalty_l
 require_once POPOLO_LOYALTY_PLUGIN_DIR . 'includes/class-api-client.php';
 require_once POPOLO_LOYALTY_PLUGIN_DIR . 'includes/class-order-sync.php';
 require_once POPOLO_LOYALTY_PLUGIN_DIR . 'includes/class-checkout.php';
+require_once POPOLO_LOYALTY_PLUGIN_DIR . 'includes/class-coupon-bridge.php';
 require_once POPOLO_LOYALTY_PLUGIN_DIR . 'admin/class-admin.php';
+
+/**
+ * Identificador de origen para Odoo, distinto por subtienda del multisite:
+ * el sitio principal conserva 'woocommerce' (continuidad con el historial de
+ * sync ya registrado en Odoo); las sedes usan 'woocommerce-{subdominio}'.
+ */
+function popolo_loyalty_source_slug(): string {
+    if (!is_multisite() || is_main_site()) {
+        return 'woocommerce';
+    }
+    $host  = wp_parse_url(home_url(), PHP_URL_HOST) ?: '';
+    $label = explode('.', $host)[0] ?: 'site' . get_current_blog_id();
+    return 'woocommerce-' . sanitize_key($label);
+}
 
 /* ── Activation: create log table ────────────────────────────────────────── */
 register_activation_hook(__FILE__, 'popolo_loyalty_activate');
@@ -76,6 +91,7 @@ function popolo_loyalty_init() {
 
     Popolo_Order_Sync::get_instance();
     Popolo_Checkout::get_instance();
+    Popolo_Coupon_Bridge::get_instance();
 
     if (is_admin()) {
         Popolo_Admin::get_instance();
