@@ -293,15 +293,47 @@
 
     // Dropdown de sede para "Recojo en tienda" — reemplaza visualmente la
     // sección nativa "Ubicaciones de recogida" de WC Blocks (hoy solo tiene
-    // 1 local genérico placeholder, oculto vía CSS). Puramente visual por
-    // ahora: el enlace "Ver Mapa" queda con URLs de búsqueda de Google Maps
-    // genéricas — pendiente de reemplazar por las coordenadas/enlaces reales
-    // de cada sede cuando se conecte el backend.
+    // 1 local genérico placeholder, oculto vía CSS). Coordenadas reales de
+    // cada sede (mismas que usa popolo-app-theme para "distancia real al
+    // local" en el home, ver functions.php de ese repo) — con eso se puede
+    // calcular metros reales y armar el link de "Cómo llegar" a pie.
     var PICKUP_SEDES = [
-        { value: 'miraflores', label: 'Popolo Miraflores', maps: 'https://www.google.com/maps/search/?api=1&query=Popolo+Pizza+Miraflores' },
-        { value: 'sanisidro',  label: 'Popolo San Isidro',  maps: 'https://www.google.com/maps/search/?api=1&query=Popolo+Pizza+San+Isidro' },
-        { value: 'chacarilla', label: 'Popolo Chacarilla',  maps: 'https://www.google.com/maps/search/?api=1&query=Popolo+Pizza+Chacarilla' }
+        { value: 'miraflores', label: 'Popolo Miraflores', lat: -12.1220859, lng: -77.032755 },
+        { value: 'sanisidro',  label: 'Popolo San Isidro',  lat: -12.0999158, lng: -77.0367056 },
+        { value: 'chacarilla', label: 'Popolo Chacarilla',  lat: -12.1106877, lng: -76.9876609 }
     ];
+
+    // Ubicación del cliente (geolocalización del navegador) — se pide una
+    // sola vez por carga de página y se reusa para cualquier sede que elija
+    // en el dropdown. Mismo patrón/margen de error que
+    // requestGeolocation()/haversineKm() del store Alpine en
+    // popolo-app-theme/functions.php, pero en JS plano (este archivo no
+    // corre en el contexto de Alpine) y en metros en vez de km.
+    var _userCoords = null; // {lat, lng} | null
+    var _geoRequested = false;
+
+    function haversineMeters(lat1, lon1, lat2, lon2) {
+        var R = 6371000;
+        var dLat = (lat2 - lat1) * Math.PI / 180;
+        var dLon = (lon2 - lon1) * Math.PI / 180;
+        var a = Math.sin(dLat / 2) * Math.sin(dLat / 2)
+            + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    }
+
+    function requestUserLocation(callback) {
+        if (_userCoords) { callback(_userCoords); return; }
+        if (_geoRequested || !navigator.geolocation) { callback(null); return; }
+        _geoRequested = true;
+        navigator.geolocation.getCurrentPosition(
+            function (pos) {
+                _userCoords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+                callback(_userCoords);
+            },
+            function () { callback(null); },
+            { enableHighAccuracy: false, timeout: 8000, maximumAge: 300000 }
+        );
+    }
 
     function isPickupModeSelected() {
         var opts = document.querySelectorAll('.wc-block-checkout__shipping-method-option');
@@ -351,10 +383,15 @@
             select.appendChild(opt);
         });
 
+        var distance = document.createElement('span');
+        distance.id = 'popolo-pickup-distance';
+        distance.className = 'popolo-pickup-sede__distance';
+        distance.style.display = 'none';
+
         var link = document.createElement('a');
         link.id = 'popolo-pickup-maps-link';
         link.className = 'popolo-pickup-sede__maps-link';
-        link.textContent = 'Ver Mapa';
+        link.textContent = 'Cómo llegar';
         link.target = '_blank';
         link.rel = 'noopener';
         link.style.display = 'none';
@@ -364,17 +401,37 @@
             for (var i = 0; i < PICKUP_SEDES.length; i++) {
                 if (PICKUP_SEDES[i].value === select.value) { chosen = PICKUP_SEDES[i]; break; }
             }
-            if (chosen) {
-                link.href = chosen.maps;
-                link.style.display = 'inline-block';
-            } else {
+            if (!chosen) {
                 link.style.display = 'none';
+                distance.style.display = 'none';
+                return;
             }
+
+            // El link funciona igual sin geolocalización (Maps arranca la ruta
+            // desde la ubicación actual del dispositivo por su cuenta) — la
+            // distancia en metros es el único dato que sí depende de que el
+            // navegador haya dado permiso.
+            link.href = 'https://www.google.com/maps/dir/?api=1&destination=' + chosen.lat + ',' + chosen.lng + '&travelmode=walking';
+            link.style.display = 'inline-block';
+            distance.style.display = 'none';
+
+            requestUserLocation(function (coords) {
+                if (!coords || select.value !== chosen.value) return; // el usuario ya cambió de sede
+                link.href = 'https://www.google.com/maps/dir/?api=1&origin=' + coords.lat + ',' + coords.lng
+                    + '&destination=' + chosen.lat + ',' + chosen.lng + '&travelmode=walking';
+                var meters = haversineMeters(coords.lat, coords.lng, chosen.lat, chosen.lng);
+                distance.textContent = 'Estás a ' + Math.round(meters) + ' mts.';
+                distance.style.display = 'inline-block';
+            });
         });
 
         wrap.appendChild(label);
         wrap.appendChild(select);
-        wrap.appendChild(link);
+        var linkRow = document.createElement('div');
+        linkRow.className = 'popolo-pickup-sede__link-row';
+        linkRow.appendChild(distance);
+        linkRow.appendChild(link);
+        wrap.appendChild(linkRow);
 
         fieldset.insertAdjacentElement('afterend', wrap);
     }
@@ -698,6 +755,20 @@
         wrappers.forEach(function (w) {
             w.style.display = visible ? '' : 'none';
         });
+
+        // Al ocultarlos (invitado, no crea cuenta) hay que limpiar el valor
+        // en el store de checkout, no solo esconder el input: WC Blocks
+        // inicializa estos campos en "0" (no en '""'), y "0" no es una de
+        // las opciones válidas del select (doc-type) — el pedido se
+        // rechazaba con "popolo-loyalty/doc-type no es uno de , DNI, CE,
+        // Pasaporte y ." aunque el campo esté oculto y sea opcional.
+        if (!visible && wp.data && wp.data.dispatch) {
+            wp.data.dispatch('wc/store/checkout').setAdditionalFields({
+                'popolo-loyalty/doc-type':   '',
+                'popolo-loyalty/doc-number': '',
+                'popolo-loyalty/birth-date': '',
+            });
+        }
     }
 
     function initBlockCheckout() {
