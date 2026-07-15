@@ -100,6 +100,20 @@ class Popolo_Checkout {
         // Scripts & styles
         add_action('wp_enqueue_scripts', [$this, 'enqueue_scripts']);
 
+        // Limpiar prefijo duplicado en metadata (ej. "Tamaño: Tamaño: Grande 35CM")
+        // que WooCommerce puede generar cuando el display_value ya incluye el label
+        add_filter('woocommerce_order_item_get_formatted_meta_data', [$this, 'clean_duplicate_attribute_prefix']);
+
+        // Misma limpieza pero en el nombre del término del atributo — causa
+        // real del duplicado: varios términos de atributo (pa_tamano, pa_sabor,
+        // etc.) tienen el label incluido en el nombre de la BD (ej. término
+        // "Tamaño: Grande 35CM" para la taxonomía "Tamaño"). Este filtro corre
+        // en el Store API (resumen de carrito/checkout) y en el resto de
+        // WooCommerce Core cada vez que arma "Label: Value" a partir del
+        // nombre del término — sin esto, el resumen de checkout (que combina
+        // label + nombre del término por separado) muestra el duplicado.
+        add_filter('woocommerce_variation_option_name', [$this, 'clean_duplicate_variation_option_name'], 10, 3);
+
         // AJAX
         add_action('wp_ajax_popolo_get_points',        [$this, 'ajax_get_points']);
         add_action('wp_ajax_nopriv_popolo_get_points', [$this, 'ajax_get_points']);
@@ -733,6 +747,56 @@ class Popolo_Checkout {
                 'page'         => $page,
             ]);
         }
+    }
+
+    /* ── Metadata cleanup ──────────────────────────────────────────────── */
+
+    /**
+     * Limpia prefijo duplicado en metadata cuando display_value ya incluye
+     * el display_key (ej. "Tamaño: Tamaño: Grande 35CM" → "Tamaño: Grande 35CM").
+     * WooCommerce puede generar display_value con el label incluido,
+     * y algunos templates agregan el label NUEVAMENTE.
+     */
+    public function clean_duplicate_attribute_prefix($formatted_meta) {
+        if (empty($formatted_meta) || !is_array($formatted_meta)) {
+            return $formatted_meta;
+        }
+
+        foreach ($formatted_meta as $meta) {
+            if (!isset($meta->display_key, $meta->display_value)) {
+                continue;
+            }
+
+            $key   = wp_strip_all_tags($meta->display_key);
+            $value = wp_strip_all_tags($meta->display_value);
+
+            // Si display_value comienza con "Key: ", es redundante — mostrar solo el value
+            if (!empty($key) && str_starts_with($value, $key . ': ')) {
+                $meta->display_value = $value;
+                // display_key queda igual; el template lo agregará una vez sola
+            }
+        }
+
+        return $formatted_meta;
+    }
+
+    /**
+     * Limpia el mismo duplicado de prefijo pero a nivel del nombre del
+     * término de atributo (ej. taxonomía "pa_tamano", término con nombre
+     * "Tamaño: Grande 35CM"). $taxonomy llega como el nombre de la
+     * taxonomía (ej. "pa_tamano") cuando el atributo es global.
+     */
+    public function clean_duplicate_variation_option_name($value, $term, $taxonomy) {
+        if (!is_string($value) || empty($taxonomy)) {
+            return $value;
+        }
+
+        $label = wc_attribute_label($taxonomy);
+        if (!empty($label) && str_starts_with($value, $label . ': ')) {
+            return substr($value, strlen($label) + 2);
+        }
+
+        return $value;
     }
 
     /* ── AJAX ─────────────────────────────────────────────────────────── */
