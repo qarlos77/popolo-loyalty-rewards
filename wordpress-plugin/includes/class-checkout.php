@@ -177,6 +177,45 @@ class Popolo_Checkout {
                 return true;
             },
         ]);
+
+        // "Deseo factura": checkbox + RUC/Razón Social, colapsados por
+        // defecto (checkout.js los oculta/muestra según el checkbox — ver
+        // setInvoiceFieldsVisible()). Sin validación de formato ni consulta
+        // a SUNAT a propósito (pedido explícito de Carlos 2026-07-15).
+        // location:'order' — WooCommerce los renderiza al final del
+        // checkout (después de Opciones de pago, antes de "Realizar el
+        // pedido"), pedido explícito de Carlos.
+        woocommerce_register_additional_checkout_field([
+            'id'       => 'popolo-invoice/wants-invoice',
+            'label'    => 'Deseo factura (con RUC)',
+            'location' => 'order',
+            'type'     => 'checkbox',
+            'required' => false,
+        ]);
+
+        woocommerce_register_additional_checkout_field([
+            'id'         => 'popolo-invoice/ruc',
+            'label'      => 'RUC',
+            'location'   => 'order',
+            'type'       => 'text',
+            'required'   => false,
+            'attributes' => [
+                'maxlength'                 => '11',
+                'inputmode'                 => 'numeric',
+                'data-popolo-invoice-field' => '1',
+            ],
+        ]);
+
+        woocommerce_register_additional_checkout_field([
+            'id'         => 'popolo-invoice/razon-social',
+            'label'      => 'Razón Social',
+            'location'   => 'order',
+            'type'       => 'text',
+            'required'   => false,
+            'attributes' => [
+                'data-popolo-invoice-field' => '1',
+            ],
+        ]);
     }
 
     /* ── Puente Additional Fields (Mi Cuenta) ↔ billing_doc_type/etc ───── */
@@ -260,6 +299,30 @@ class Popolo_Checkout {
         if ($doc_type)   $order->update_meta_data('_popolo_doc_type',   $doc_type);
         if ($doc_number) $order->update_meta_data('_popolo_doc_number', $doc_number);
         if ($birth_date) $order->update_meta_data('_popolo_birth_date', $birth_date);
+
+        // "Deseo factura": RUC/Razón Social solo se guardan si el cliente
+        // tildó el checkbox — dato para que la facturación electrónica
+        // (odoo-19-facturacion-pe) emita factura en vez de boleta.
+        $wants_invoice = filter_var(
+            $additional['popolo-invoice/wants-invoice'] ??
+            $billing['popolo-invoice/wants-invoice']    ??
+            $body['popolo-invoice/wants-invoice']       ?? false,
+            FILTER_VALIDATE_BOOLEAN
+        );
+        if ($wants_invoice) {
+            $ruc = sanitize_text_field(
+                $additional['popolo-invoice/ruc'] ??
+                $billing['popolo-invoice/ruc']    ??
+                $body['popolo-invoice/ruc']       ?? ''
+            );
+            $razon_social = sanitize_text_field(
+                $additional['popolo-invoice/razon-social'] ??
+                $billing['popolo-invoice/razon-social']    ??
+                $body['popolo-invoice/razon-social']       ?? ''
+            );
+            $order->update_meta_data('_popolo_invoice_ruc', $ruc);
+            $order->update_meta_data('_popolo_invoice_razon_social', $razon_social);
+        }
     }
 
     private function normalize_date(string $raw): string {
@@ -544,6 +607,12 @@ class Popolo_Checkout {
                 $fields[$group]['shipping_city']['label']       = 'Distrito';
                 $fields[$group]['shipping_city']['placeholder'] = 'Distrito';
             }
+            if (isset($fields[$group]['billing_address_2'])) {
+                $fields[$group]['billing_address_2']['placeholder'] = 'Agregar interior';
+            }
+            if (isset($fields[$group]['shipping_address_2'])) {
+                $fields[$group]['shipping_address_2']['placeholder'] = 'Agregar interior';
+            }
         }
         // Flat array (billing_fields / shipping_fields)
         if (isset($fields['billing_city'])) {
@@ -553,6 +622,12 @@ class Popolo_Checkout {
         if (isset($fields['shipping_city'])) {
             $fields['shipping_city']['label']       = 'Distrito';
             $fields['shipping_city']['placeholder'] = 'Distrito';
+        }
+        if (isset($fields['billing_address_2'])) {
+            $fields['billing_address_2']['placeholder'] = 'Agregar interior';
+        }
+        if (isset($fields['shipping_address_2'])) {
+            $fields['shipping_address_2']['placeholder'] = 'Agregar interior';
         }
         if (isset($fields['billing_state'])) {
             $fields['billing_state']['label'] = 'Provincia';
@@ -722,6 +797,8 @@ class Popolo_Checkout {
             wp_add_inline_style(
                 'wc-blocks-style',
                 '.wc-block-checkout__use-address-for-billing { display: none !important; }'
+                . '.popolo-invoice-arrow { display: inline-block; margin-left: 6px; transition: transform .2s ease; }'
+                . '.popolo-invoice-arrow--open .popolo-invoice-arrow { transform: rotate(180deg); }'
             );
         }
 

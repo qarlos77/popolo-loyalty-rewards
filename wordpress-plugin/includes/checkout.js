@@ -92,7 +92,7 @@
     }
 
     function cleanPoloOptionalLabels() {
-        ['doc-type', 'doc-number', 'birth-date'].forEach(function (key) {
+        ['doc-type', 'doc-number', 'birth-date', 'invoice-ruc', 'razon-social'].forEach(function (key) {
             var input = document.querySelector('[id*="' + key + '"]');
             if (!input) return;
             // Walk up max 4 levels to find a label
@@ -362,11 +362,14 @@
         wrap.id = 'popolo-pickup-sede';
         wrap.className = 'popolo-pickup-sede';
 
+        var selectId = 'popolo-pickup-sede-select-field';
         var label = document.createElement('label');
         label.className = 'popolo-pickup-sede__label';
+        label.htmlFor = selectId;
         label.textContent = 'Selecciona tu tienda';
 
         var select = document.createElement('select');
+        select.id = selectId;
         select.className = 'popolo-pickup-sede__select';
 
         var placeholder = document.createElement('option');
@@ -491,11 +494,14 @@
         var wrap = document.createElement('div');
         wrap.id = 'popolo-distrito-select';
 
+        var selectId = 'popolo-distrito-select-field';
         var label = document.createElement('label');
         label.className = 'popolo-distrito-select__label';
+        label.htmlFor = selectId;
         label.textContent = 'Distrito';
 
         var select = document.createElement('select');
+        select.id = selectId;
         select.className = 'popolo-distrito-select__select';
 
         var placeholder = document.createElement('option');
@@ -739,6 +745,84 @@
         pushContactFieldsToTargets();
     }
 
+    // "Deseo factura" — checkbox + RUC/Razón Social colapsados por defecto.
+    // Mismo patrón que setPoloFieldsVisible() (wrappers ocultos por CSS
+    // inline + limpieza del valor en el store al ocultar, porque WC Blocks
+    // valida campos ocultos igual que los visibles).
+    function findInvoiceFieldWrappers() {
+        var wrappers = [];
+        document.querySelectorAll('[data-popolo-invoice-field]').forEach(function (input) {
+            var wrapper = input.closest('.wc-block-components-text-input') ||
+                          (input.parentElement && input.parentElement.parentElement);
+            if (wrapper) wrappers.push(wrapper);
+        });
+        return wrappers;
+    }
+
+    function findInvoiceCheckbox() {
+        return document.querySelector('[id*="wants-invoice"]') ||
+               document.querySelector('[name*="wants-invoice"]');
+    }
+
+    function setInvoiceFieldsVisible(visible) {
+        findInvoiceFieldWrappers().forEach(function (w) {
+            w.style.display = visible ? '' : 'none';
+        });
+        if (!visible && wp.data && wp.data.dispatch) {
+            wp.data.dispatch('wc/store/checkout').setAdditionalFields({
+                'popolo-invoice/ruc':          '',
+                'popolo-invoice/razon-social': '',
+            });
+        }
+    }
+
+    var lastInvoiceState = null;
+
+    // Aplica visibilidad/flecha ya conociendo el estado (checked) — separado
+    // de syncInvoiceFields() para poder llamarlo DIRECTO desde el evento
+    // 'change' del checkbox, sin esperar a que el store de Redux confirme el
+    // valor (ver comentario en patchInvoiceArrow: leer el store en el mismo
+    // tick del click puede devolver el valor viejo, y esperar al próximo
+    // MutationObserver genérico metía un delay perceptible).
+    function applyInvoiceVisibility(wants, checkbox) {
+        lastInvoiceState = wants;
+        setInvoiceFieldsVisible(wants);
+        var wrap = checkbox && checkbox.closest('.wc-block-components-checkbox');
+        if (wrap) wrap.classList.toggle('popolo-invoice-arrow--open', wants);
+    }
+
+    function patchInvoiceArrow() {
+        var checkbox = findInvoiceCheckbox();
+        if (!checkbox) return;
+        var wrap = checkbox.closest('.wc-block-components-checkbox');
+        if (!wrap || wrap.querySelector('.popolo-invoice-arrow')) return;
+        var arrow = document.createElement('span');
+        arrow.className = 'popolo-invoice-arrow';
+        arrow.innerHTML = '&#9662;'; // ▾
+        wrap.appendChild(arrow);
+
+        // Respuesta inmediata al click — no depender del MutationObserver
+        // genérico (childList/subtree, no dispara con solo el checked del
+        // checkbox) ni de esperar que el store de checkout se actualice.
+        checkbox.addEventListener('change', function () {
+            applyInvoiceVisibility(checkbox.checked, checkbox);
+        });
+    }
+
+    // Red de seguridad: si React vuelve a renderizar el checkbox (nuevo nodo,
+    // sin el listener de arriba) o el toggle ocurrió por otra vía, esto
+    // corrige la visibilidad leyendo el store real — corre en cada tick del
+    // MutationObserver general, igual que el resto de patchStaticTexts().
+    function syncInvoiceFields() {
+        if (!wp.data || !wp.data.select) return;
+        var coStore = wp.data.select('wc/store/checkout');
+        if (!coStore || !coStore.getAdditionalFields) return;
+        var fields = coStore.getAdditionalFields() || {};
+        var wants  = !!fields['popolo-invoice/wants-invoice'];
+        if (wants === lastInvoiceState) return;
+        applyInvoiceVisibility(wants, findInvoiceCheckbox());
+    }
+
     function patchStaticTexts() {
         patchShippingToggleLabels();
         patchDeliveryIcon();
@@ -748,6 +832,8 @@
         fillDummyBillingAddress();
         mirrorBillingFromShipping();
         renderPersonalContactFields();
+        patchInvoiceArrow();
+        syncInvoiceFields();
     }
 
     function setPoloFieldsVisible(visible) {
