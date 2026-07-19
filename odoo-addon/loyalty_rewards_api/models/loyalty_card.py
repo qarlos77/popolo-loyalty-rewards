@@ -21,6 +21,14 @@ class LoyaltyCard(models.Model):
         return records
 
     def _push_coupon_to_wc(self, card):
+        # Multisede: con tiendas registradas (addon popolo_wc_multisede) el
+        # cupón NO se empuja por adelantado — no se sabe en qué sede va a
+        # pagar el cliente. Se crea bajo demanda cuando lo escribe en un
+        # checkout, vía /api/loyalty/coupon-validate (cupón virtual en WC).
+        if 'popolo.wc.site' in self.env and \
+                self.env['popolo.wc.site'].sudo().search_count([]) > 0:
+            return
+
         icp       = self.env['ir.config_parameter'].sudo()
         wc_url    = (icp.get_param('loyalty_rewards_api.wc_url') or '').rstrip('/')
         wc_key    = icp.get_param('loyalty_rewards_api.wc_consumer_key')

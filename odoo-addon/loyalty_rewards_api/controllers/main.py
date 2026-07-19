@@ -1007,6 +1007,130 @@ class LoyaltyAPI(http.Controller):
 
         return _json_response({'coupons': result})
 
+    # ── Cupón bajo demanda (multi-sede) ──────────────────────────────────────
+    # Con varias subtiendas WooCommerce no se puede saber de antemano en cuál
+    # va a pagar el cliente — el cupón ya NO se empuja al crearse la tarjeta
+    # (ver loyalty_card.py): la sede lo valida acá en vivo cuando el cliente
+    # lo escribe en SU checkout, y lo consume al procesarse la orden. Odoo es
+    # la única fuente de verdad de si un código sigue vigente.
+
+    def _find_promo_card(self, code):
+        return request.env['loyalty.card'].sudo().search([
+            ('code', '=', code),
+            ('program_id.program_type', '=', 'promo_code'),
+            ('program_id.active', '=', True),
+        ], limit=1)
+
+    @http.route('/api/loyalty/coupon-validate', type='http', auth='none',
+                methods=['POST'], csrf=False)
+    def coupon_validate(self, **kw):
+        icp        = request.env['ir.config_parameter'].sudo()
+        stored_key = icp.get_param('loyalty_rewards_api.sync_api_key', '')
+        sent_key   = request.httprequest.headers.get('X-API-Key', '')
+        if not stored_key or sent_key != stored_key:
+            return _json_response({'error': 'Unauthorized'}, 401)
+
+        try:
+            body = json.loads(request.httprequest.data)
+        except Exception:
+            return _json_response({'error': 'Invalid JSON'}, 400)
+
+        code = (body.get('code') or '').strip()
+        if not code:
+            return _json_response({'error': 'code required'}, 400)
+
+        card = self._find_promo_card(code)
+        if not card:
+            return _json_response({'valid': False, 'reason': 'not_found'})
+        if not card.active or card.points < 1:
+            return _json_response({'valid': False, 'reason': 'used'})
+        if card.expiration_date and card.expiration_date < _date.today():
+            return _json_response({'valid': False, 'reason': 'expired'})
+
+        reward = request.env['loyalty.reward'].sudo().search(
+            [('program_id', '=', card.program_id.id)], limit=1
+        )
+        discount      = reward.discount if reward and reward.reward_type == 'discount' else 0
+        discount_mode = reward.discount_mode if reward else 'percent'
+        # WooCommerce solo distingue porcentaje vs monto fijo por orden
+        wc_type = 'fixed_cart' if discount_mode == 'per_order' else 'percent'
+
+        return _json_response({
+            'valid':            True,
+            'code':             card.code,
+            'amount':           discount or 0,
+            'discount_mode':    discount_mode,
+            'wc_discount_type': wc_type,
+            'program_name':     _get_text(card.program_id.name),
+            'description':      _get_text(reward.description) if reward else '',
+            'partner_email':    card.partner_id.email or '',
+            'expiration_date':  card.expiration_date.isoformat() if card.expiration_date else None,
+        })
+
+    @http.route('/api/loyalty/coupon-consume', type='http', auth='none',
+                methods=['POST'], csrf=False)
+    def coupon_consume(self, **kw):
+        icp        = request.env['ir.config_parameter'].sudo()
+        stored_key = icp.get_param('loyalty_rewards_api.sync_api_key', '')
+        sent_key   = request.httprequest.headers.get('X-API-Key', '')
+        if not stored_key or sent_key != stored_key:
+            return _json_response({'error': 'Unauthorized'}, 401)
+
+        try:
+            body = json.loads(request.httprequest.data)
+        except Exception:
+            return _json_response({'error': 'Invalid JSON'}, 400)
+
+        code     = (body.get('code') or '').strip()
+        order_id = str(body.get('order_id', '')).strip()
+        source   = str(body.get('source', 'woocommerce')).strip()
+        if not code:
+            return _json_response({'error': 'code required'}, 400)
+
+        card = self._find_promo_card(code)
+        if not card:
+            return _json_response({'success': False, 'reason': 'not_found'}, 404)
+
+        # Consumo ATÓMICO: si dos sedes (o una sede y el POS) compiten por el
+        # mismo código, el UPDATE condicional garantiza que solo uno gana.
+        request.env.cr.execute(
+            "UPDATE loyalty_card SET points = 0 "
+            "WHERE id = %s AND points >= 1 RETURNING id",
+            (card.id,),
+        )
+        won = request.env.cr.fetchone()
+        card.invalidate_recordset(['points'])
+
+        if not won:
+            return _json_response({'success': False, 'already_used': True}, 409)
+
+        try:
+            request.env['loyalty.history'].sudo().create({
+                'card_id':     card.id,
+                'description': f'Cupón usado en pedido {source} #{order_id}',
+                'issued':      0,
+                'used':        1,
+            })
+        except Exception:
+            pass
+        try:
+            request.env['loyalty.sync.log'].sudo().create({
+                'external_order_id': f'WC-COUPON-USE-{code}',
+                'source':            'wc_coupon',
+                'email':             card.partner_id.email or '',
+                'partner_id':        card.partner_id.id,
+                'state':             'synced',
+                'message':           f'Cupón {code} consumido — pedido {source} #{order_id}.',
+            })
+        except Exception:
+            pass
+
+        return _json_response({
+            'success':      True,
+            'partner_name': card.partner_id.name,
+            'code':         card.code,
+        })
+
     # ── Self-registration (público, sin API key) ──────────────────────────────
     @http.route('/api/loyalty/self-register', type='http', auth='none', methods=['POST'], csrf=False)
     def self_register(self, **kw):
