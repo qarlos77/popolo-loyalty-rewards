@@ -965,6 +965,8 @@
         var email = $ty.data('email');
         if (!email) return;
 
+        var orderTotal = parseFloat($ty.data('total')) || 0;
+
         $.post(popoloLoyalty.ajaxurl, {
             action:      'popolo_get_points',
             _ajax_nonce: popoloLoyalty.nonce,
@@ -972,11 +974,24 @@
         })
         .done(function (data) {
             if (data && data.found) {
-                var pts = data.total_points || 0;
-                $ty.html(
-                    '🎁 ¡Gracias por tu compra, <strong>' + esc(data.partner_name) + '</strong>!'
-                    + ' Ahora tienes <strong>' + fmt(pts) + ' puntos</strong> de lealtad.'
-                ).slideDown(300);
+                var current   = data.total_points || 0;
+                var ratio     = data.points_ratio || 0;
+                var projected = Math.floor(orderTotal * ratio);
+                // Los puntos de ESTE pedido recién se suman cuando el pedido
+                // pasa a "completed" en WC (ver Popolo_Order_Sync) — hasta
+                // entonces mostramos la proyección según la regla vigente,
+                // no "0 puntos" (confuso: el cliente sí compró).
+                var html = '🎁 ¡Gracias por tu compra, <strong>' + esc(data.partner_name) + '</strong>!';
+                if (projected > 0) {
+                    html += ' Vas a ganar <strong>' + fmt(projected) + ' puntos</strong> con este pedido' +
+                        ' en cuanto se complete.';
+                }
+                if (current > 0) {
+                    html += ' Ya tienes <strong>' + fmt(current) + ' puntos</strong> acumulados.';
+                }
+                $ty.html(html).slideDown(300);
+                // Ya tiene cuenta de lealtad — invitarlo a "registrarse" es confuso.
+                $('#popolo-guest-register-banner').hide();
             }
         });
     }
