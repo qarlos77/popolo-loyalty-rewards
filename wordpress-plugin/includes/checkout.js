@@ -6,6 +6,11 @@
     var $widget     = null;
     var isBlockCO   = false;
 
+    var ICON_GIFT = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ff4a4a" ' +
+        'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ' +
+        'style="flex-shrink:0;"><rect x="3" y="8" width="18" height="13" rx="1.5"/><path d="M3 12h18M12 8v13"/>' +
+        '<path d="M12 8c-1.2 0-3-1-3-2.8A2.2 2.2 0 0 1 11.2 3C12.8 3 12 6 12 8zm0 0c1.2 0 3-1 3-2.8A2.2 2.2 0 0 0 12.8 3C11.2 3 12 6 12 8z"/></svg>';
+
     /* ── Helpers ─────────────────────────────────────────────────────────── */
 
     function esc(str) {
@@ -29,13 +34,17 @@
         var earned = (ratio > 0 && cartTotal > 0) ? Math.floor(cartTotal * ratio) : 0;
         var after  = points + earned;
 
-        var html = '🎁 Hola <strong>' + esc(name) + '</strong>'
+        var html = '<span style="display:flex;align-items:center;gap:10px;">' + ICON_GIFT
+                 + '<span style="white-space:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;">'
+                 + '<strong>' + esc(name) + '</strong>'
                  + ' — tienes <strong>' + fmt(points) + ' puntos</strong>';
 
         if (earned > 0) {
             html += ' · esta compra suma <strong>+' + fmt(earned) + ' pts</strong>'
                   + ' · total: <strong>' + fmt(after) + ' pts</strong>';
         }
+
+        html += '</span></span>';
 
         $widget.html(html).slideDown(250);
     }
@@ -862,7 +871,8 @@
         var $block = $('.wp-block-woocommerce-checkout');
         if (!$block.length) return;
 
-        $widget = $('<div id="popolo-points-widget" class="woocommerce-info" style="display:none;margin-bottom:16px;"></div>');
+        $widget = $('<div id="popolo-points-widget" style="display:none;margin-bottom:16px;background:#FFF7CF;' +
+            'border-radius:16px;padding:16px 20px;font-size:14px;color:#1a1a1a;"></div>');
         $block.before($widget);
 
         if (typeof wp !== 'undefined' && wp.data) {
