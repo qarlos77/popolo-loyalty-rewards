@@ -34,8 +34,8 @@
         var earned = (ratio > 0 && cartTotal > 0) ? Math.floor(cartTotal * ratio) : 0;
         var after  = points + earned;
 
-        var html = '<span style="display:flex;align-items:center;gap:10px;">' + ICON_GIFT
-                 + '<span style="white-space:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;">'
+        var html = '<span style="display:flex;align-items:flex-start;gap:10px;">' + ICON_GIFT
+                 + '<span style="margin-top:1px;">'
                  + '<strong>' + esc(name) + '</strong>'
                  + ' — tienes <strong>' + fmt(points) + ' puntos</strong>';
 
