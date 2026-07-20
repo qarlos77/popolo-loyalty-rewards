@@ -843,6 +843,23 @@
         renderPersonalContactFields();
         patchInvoiceArrow();
         syncInvoiceFields();
+        positionPointsWidget();
+    }
+
+    // El banner de puntos vive justo debajo del campo de correo (no antes de
+    // todo el bloque de checkout) — el usuario recién escribe el email ahí,
+    // no tiene sentido que el banner aparezca arriba de todo obligando a
+    // scrollear de vuelta al inicio para verlo. Corre en cada tick del
+    // MutationObserver (mismo mecanismo que renderPersonalContactFields) por
+    // si React vuelve a renderizar el campo de email en un nodo nuevo.
+    function positionPointsWidget() {
+        if (!$widget || !$widget.length) return;
+        var input = document.getElementById('email');
+        if (!input) return;
+        var wrapper = input.closest('.wc-block-components-text-input') || input.parentElement;
+        if (!wrapper) return;
+        if ($widget.prev().is(wrapper)) return;
+        $widget.insertAfter(wrapper);
     }
 
     function setPoloFieldsVisible(visible) {
@@ -867,10 +884,12 @@
     }
 
     function initBlockCheckout() {
-        // Inject widget container above the checkout block
         var $block = $('.wp-block-woocommerce-checkout');
         if (!$block.length) return;
 
+        // Se inserta antes del bloque como fallback inicial (el campo email
+        // puede no existir todavía en este punto) — positionPointsWidget()
+        // lo reubica debajo del email en el primer tick de patchStaticTexts().
         $widget = $('<div id="popolo-points-widget" style="display:none;margin-bottom:16px;background:#FFF7CF;' +
             'border-radius:16px;padding:16px 20px;font-size:14px;color:#1a1a1a;"></div>');
         $block.before($widget);
